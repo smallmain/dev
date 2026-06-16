@@ -14,9 +14,10 @@ const jsonSourceDirs = [["web/ts-config", "ts"]];
 const typescriptSourceDirs = [
   ["web/oxlint-config", "oxlint"],
   ["web/oxfmt-config", "oxfmt"],
+  ["web/stylelint-config", "stylelint"],
 ];
 
-const publishFiles = ["index.js", "types", "ts", "oxlint", "oxfmt"];
+const publishFiles = ["index.js", "types", "ts", "oxlint", "oxfmt", "stylelint"];
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
