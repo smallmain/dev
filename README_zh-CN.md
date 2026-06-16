@@ -3,7 +3,7 @@
 </p> -->
 
 <h1 align="center">
-Development Configuration
+SmallMain's Development Configuration
 </h1>
 
 <p align="center">
@@ -147,10 +147,6 @@ export default defineConfig({
 | `@smallmains/cfgs/oxfmt/generic.ts` | 通用配置。 |
 
 ## 贡献
-
-TODO
-
-### 构建与发布
 
 - 执行 `pnpm run build` 构建项目。
 - 执行 `pnpm run publish` 构建并推送新版本。
