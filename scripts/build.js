@@ -9,22 +9,14 @@ const outDir = path.join(rootDir, "dist/npm/cfgs");
 const outPackageDir = path.join(rootDir, "web/out-package");
 const packageTemplateDir = path.join(rootDir, "web/package-template");
 
-const jsonSourceDirs = [
-  ["web/ts-config", "ts"],
-];
+const jsonSourceDirs = [["web/ts-config", "ts"]];
 
 const typescriptSourceDirs = [
   ["web/oxlint-config", "oxlint"],
   ["web/oxfmt-config", "oxfmt"],
 ];
 
-const publishFiles = [
-  "index.js",
-  "types",
-  "ts",
-  "oxlint",
-  "oxfmt",
-];
+const publishFiles = ["index.js", "types", "ts", "oxlint", "oxfmt"];
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
@@ -37,7 +29,7 @@ async function writeJson(filePath, value) {
 async function collectTypeScriptFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
   const files = await Promise.all(
-    entries.map(entry => {
+    entries.map((entry) => {
       const entryPath = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {
@@ -63,7 +55,7 @@ function runCommand(command, args) {
     });
 
     child.on("error", reject);
-    child.on("exit", code => {
+    child.on("exit", (code) => {
       if (code === 0) {
         resolve();
         return;
@@ -74,13 +66,13 @@ function runCommand(command, args) {
   });
 }
 
-function createPeerDependencies(peerDependencyNames, dependencyVersions) {
+function createDependencies(dependencyNames, dependencyVersions, sourceDescription) {
   return Object.fromEntries(
-    peerDependencyNames.map(name => {
+    dependencyNames.map((name) => {
       const version = dependencyVersions[name];
 
       if (!version) {
-        throw new Error(`Missing version for peer dependency "${name}" in web/package-template/package.json.`);
+        throw new Error(`Missing version for dependency "${name}" in ${sourceDescription}.`);
       }
 
       return [name, version];
@@ -89,15 +81,18 @@ function createPeerDependencies(peerDependencyNames, dependencyVersions) {
 }
 
 function createPeerDependenciesMeta(peerDependencyNames) {
-  return Object.fromEntries(
-    peerDependencyNames.map(name => [name, { optional: true }]),
-  );
+  return Object.fromEntries(peerDependencyNames.map((name) => [name, { optional: true }]));
 }
 
 async function buildPackageJson() {
   const packageJson = await readJson(path.join(outPackageDir, "package.json"));
+  const rootPackageJson = await readJson(path.join(rootDir, "package.json"));
   const config = await readJson(path.join(outPackageDir, "config.json"));
   const packageTemplate = await readJson(path.join(packageTemplateDir, "package.json"));
+
+  if (!Array.isArray(config.dependencies)) {
+    throw new TypeError("web/out-package/config.json dependencies must be an array.");
+  }
 
   if (!Array.isArray(config.peerDependencies)) {
     throw new TypeError("web/out-package/config.json peerDependencies must be an array.");
@@ -106,9 +101,15 @@ async function buildPackageJson() {
   delete packageJson.devEngines;
 
   packageJson.files = publishFiles;
-  packageJson.peerDependencies = createPeerDependencies(
+  packageJson.dependencies = createDependencies(
+    config.dependencies,
+    rootPackageJson.devDependencies ?? {},
+    "package.json",
+  );
+  packageJson.peerDependencies = createDependencies(
     config.peerDependencies,
     packageTemplate.devDependencies ?? {},
+    "web/package-template/package.json",
   );
   packageJson.peerDependenciesMeta = createPeerDependenciesMeta(config.peerDependencies);
 
@@ -152,7 +153,7 @@ export async function buildPackageFiles() {
 
   for (const [sourceDir, targetDir] of jsonSourceDirs) {
     await cp(path.join(rootDir, sourceDir), path.join(outDir, targetDir), {
-      filter: source => path.basename(source) !== ".DS_Store",
+      filter: (source) => path.basename(source) !== ".DS_Store",
       recursive: true,
     });
   }

@@ -1,3 +1,16 @@
 {
-  "peerDependencies": ["oxlint", "oxlint-tsgolint", "oxfmt"]
+  "dependencies": [
+    "stylelint-config-standard",
+    "@dreamsicle.io/stylelint-config-tailwindcss",
+    "stylelint-config-css-modules",
+    "stylelint-config-clean-order",
+    "stylelint-order",
+    "stylelint-config-modern",
+    "postcss-html",
+    "stylelint-config-html",
+    "postcss-markdown",
+    "stylelint-high-performance-animation",
+    "stylelint-plugin-logical-css"
+  ],
+  "peerDependencies": ["typescript", "oxlint", "oxlint-tsgolint", "oxfmt", "stylelint"]
 }

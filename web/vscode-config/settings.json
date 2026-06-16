@@ -13,5 +13,6 @@
   },
   "[json][jsonc][jsonl][snippets][yaml]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
-  }
+  },
+  "stylelint.validate": ["css", "postcss", "html", "vue", "svelte", "astro", "markdown", "mdx"]
 }

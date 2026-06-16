@@ -36,19 +36,22 @@ SmallMain 使用的开发配置。
     <td><a href="#editor-config">Editor Config</a></td><td>EditorConfig Specification v0.17.2; 2025.6.15</td>
   </tr>
   <tr>
-    <td rowspan="5">Web</td><td><a href="#package-template">Package Template</a></td><td>2025.6.15</td>
+    <td rowspan="6">Web</td><td><a href="#package-template">Package Template</a></td><td>2025.6.15</td>
   </tr>
   <tr>
-    <td><a href="#web">VS Code Config</a></td><td>2025.6.15</td>
+    <td><a href="#web">VS Code Config</a></td><td>VS Code v1.124.2; 2025.6.15</td>
   </tr>
   <tr>
-    <td><a href="#ts-config">TS Config</a></td><td>TypeScript 6.0; 2025.06.15</td>
+    <td><a href="#ts-config">TS Config</a></td><td>2025.06.15</td>
   </tr>
   <tr>
-    <td><a href="#oxlint-config">Oxlint Config</a></td><td>Oxlint 1.70.0; 2025.06.15</td>
+    <td><a href="#oxlint-config">Oxlint Config</a></td><td>2025.06.15</td>
   </tr>
   <tr>
-    <td><a href="#oxfmt-config">Oxfmt Config</a></td><td>Oxfmt 0.55.0; 2025.06.15</td>
+    <td><a href="#oxfmt-config">Oxfmt Config</a></td><td>2025.06.15</td>
+  </tr>
+  <tr>
+    <td><a href="#stylelint-config">Stylelint Config</a></td><td>2025.06.15</td>
   </tr>
 </table>
 
@@ -142,6 +145,30 @@ export default generic;
 | 路径                                | 说明       |
 | ----------------------------------- | ---------- |
 | `@smallmains/cfgs/oxfmt/generic.js` | 通用配置。 |
+
+## Stylelint Config
+
+安装：
+
+```bash
+npm i -D @smallmains/cfgs
+```
+
+示例：
+
+`stylelint.config.ts`
+
+```ts
+{
+  "extends": "@smallmains/cfgs/stylelint/generic.js",
+}
+```
+
+| 路径                                        | 说明                       |
+| ------------------------------------------- | -------------------------- |
+| `@smallmains/cfgs/stylelint/generic.js`     | 通用配置。                 |
+| `@smallmains/cfgs/stylelint/css-modules.js` | 使用 CSS Modules 的配置。  |
+| `@smallmains/cfgs/stylelint/tailwind.js`    | 使用 Tailwind CSS 的配置。 |
 
 ## 贡献
 
