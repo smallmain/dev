@@ -110,7 +110,7 @@ npm i -D @smallmains/cfgs
 
 ```ts
 import { defineConfig } from "oxlint";
-import base from "@smallmains/cfgs/oxlint/base.ts";
+import base from "@smallmains/cfgs/oxlint/base.js";
 
 export default defineConfig({
   extends: [base],
@@ -119,7 +119,7 @@ export default defineConfig({
 
 | 路径                              | 说明       |
 | --------------------------------- | ---------- |
-| `@smallmains/cfgs/oxlint/base.ts` | 基础配置。 |
+| `@smallmains/cfgs/oxlint/base.js` | 基础配置。 |
 
 ## Oxfmt Config
 
@@ -135,7 +135,7 @@ npm i -D @smallmains/cfgs
 
 ```ts
 import { defineConfig } from "oxfmt";
-import generic from "@smallmains/cfgs/oxfmt/generic.ts";
+import generic from "@smallmains/cfgs/oxfmt/generic.js";
 
 export default defineConfig({
   extends: [generic],
@@ -144,7 +144,7 @@ export default defineConfig({
 
 | 路径                                | 说明       |
 | ----------------------------------- | ---------- |
-| `@smallmains/cfgs/oxfmt/generic.ts` | 通用配置。 |
+| `@smallmains/cfgs/oxfmt/generic.js` | 通用配置。 |
 
 ## 贡献
 

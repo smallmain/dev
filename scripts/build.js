@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -8,8 +9,11 @@ const outDir = path.join(rootDir, "dist/npm/cfgs");
 const outPackageDir = path.join(rootDir, "web/out-package");
 const packageTemplateDir = path.join(rootDir, "web/package-template");
 
-const sourceDirs = [
+const jsonSourceDirs = [
   ["web/ts-config", "ts"],
+];
+
+const typescriptSourceDirs = [
   ["web/oxlint-config", "oxlint"],
   ["web/oxfmt-config", "oxfmt"],
 ];
@@ -28,6 +32,46 @@ async function readJson(filePath) {
 
 async function writeJson(filePath, value) {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function collectTypeScriptFiles(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(entry => {
+      const entryPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        return collectTypeScriptFiles(entryPath);
+      }
+
+      if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
+        return [entryPath];
+      }
+
+      return [];
+    }),
+  );
+
+  return files.flat();
+}
+
+function runCommand(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: rootDir,
+      stdio: "inherit",
+    });
+
+    child.on("error", reject);
+    child.on("exit", code => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`${command} ${args.join(" ")} exited with code ${code}.`));
+    });
+  });
 }
 
 function createPeerDependencies(peerDependencyNames, dependencyVersions) {
@@ -71,17 +115,50 @@ async function buildPackageJson() {
   await writeJson(path.join(outDir, "package.json"), packageJson);
 }
 
+async function buildTypeScriptConfig(sourceDir, targetDir) {
+  const sourcePath = path.join(rootDir, sourceDir);
+  const sourceFiles = await collectTypeScriptFiles(sourcePath);
+
+  if (sourceFiles.length === 0) {
+    return;
+  }
+
+  await runCommand("pnpm", [
+    "exec",
+    "tsc",
+    "--module",
+    "NodeNext",
+    "--moduleResolution",
+    "NodeNext",
+    "--target",
+    "ES2022",
+    "--declaration",
+    "--strict",
+    "--noEmitOnError",
+    "--skipLibCheck",
+    "--rootDir",
+    sourcePath,
+    "--outDir",
+    path.join(outDir, targetDir),
+    ...sourceFiles,
+  ]);
+}
+
 export async function buildPackageFiles() {
   await rm(outDir, { force: true, recursive: true });
   await mkdir(outDir, { recursive: true });
 
   await buildPackageJson();
 
-  for (const [sourceDir, targetDir] of sourceDirs) {
+  for (const [sourceDir, targetDir] of jsonSourceDirs) {
     await cp(path.join(rootDir, sourceDir), path.join(outDir, targetDir), {
       filter: source => path.basename(source) !== ".DS_Store",
       recursive: true,
     });
+  }
+
+  for (const [sourceDir, targetDir] of typescriptSourceDirs) {
+    await buildTypeScriptConfig(sourceDir, targetDir);
   }
 
   await writeFile(path.join(outDir, "index.js"), "export {};\n");

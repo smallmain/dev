@@ -14,6 +14,9 @@ importers:
       oxlint:
         specifier: ^1.70.0
         version: 1.70.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
 packages:
 
@@ -291,6 +294,11 @@ packages:
     resolution: {integrity: sha512-Pugqs6M0m7Lv1I7FtxN4aoyToKg1C4tu+/381vH35y8oENM/Ai7f7C4StcoK4/+BSw9ebcS8jRiVrORFKCALLw==}
     engines: {node: ^20.0.0 || >=22.0.0}
 
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
 snapshots:
 
   '@oxfmt/binding-android-arm-eabi@0.55.0':
@@ -454,3 +462,5 @@ snapshots:
       '@oxlint/binding-win32-x64-msvc': 1.70.0
 
   tinypool@2.1.0: {}
+
+  typescript@6.0.3: {}
