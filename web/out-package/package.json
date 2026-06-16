@@ -1,7 +1,7 @@
 {
   "name": "@smallmains/dev",
   "version": "1.0.0",
-  "description": "SmallMain's development configurations.",
+  "description": "SmallMain's development scaffolding.",
   "homepage": "https://smallmain.com",
   "bugs": {
     "url": "https://github.com/smallmain/dev/issues"
