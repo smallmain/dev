@@ -1,0 +1,3 @@
+{
+  "extends": "@smallmains/cfgs/ts/generic.json"
+}

@@ -26,6 +26,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@smallmains/cfgs": "^1.0.1",
     "husky": "^9.1.7",
     "lint-staged.sh": "^0.6.9",
     "oxfmt": "^0.55.0",

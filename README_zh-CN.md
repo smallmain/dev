@@ -134,12 +134,9 @@ npm i -D @smallmains/cfgs
 `oxfmt.config.ts`
 
 ```ts
-import { defineConfig } from "oxfmt";
 import generic from "@smallmains/cfgs/oxfmt/generic.js";
 
-export default defineConfig({
-  extends: [generic],
-});
+export default generic;
 ```
 
 | 路径                                | 说明       |
