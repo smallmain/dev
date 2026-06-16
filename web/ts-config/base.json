@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": [
+    "./base/completeness.json",
+    "./base/editor-support.json",
+    "./base/emit.json",
+    "./base/interop-constraints.json",
+    "./base/javascript-support.json",
+    "./base/language-and-environment.json",
+    "./base/output-format.json",
+    "./base/type-checking.json",
+    "./base/modules.json"
+  ]
+}

@@ -1,0 +1,3 @@
+{
+  "peerDependencies": ["oxlint", "oxlint-tsgolint", "oxfmt"]
+}

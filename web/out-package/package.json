@@ -1,0 +1,32 @@
+{
+  "name": "@smallmains/cfgs",
+  "version": "1.0.0",
+  "description": "SmallMain's development configurations.",
+  "homepage": "https://smallmain.com/",
+  "bugs": {
+    "url": "https://github.com/smallmain/dev-cfgs/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "SmallMain",
+    "email": "smallmain@outlook.com",
+    "url": "https://www.smallmain.com/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smallmain/dev-cfgs.git"
+  },
+  "funding": "https://github.com/sponsors/smallmain",
+  "main": "index.js",
+  "types": "./types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.5.3",
+      "onFail": "download"
+    }
+  }
+}
