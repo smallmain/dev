@@ -39,3 +39,23 @@ minimumReleaseAgeExclude:
   - '@oxlint/binding-win32-x64-msvc@1.70.0'
   - oxfmt@0.55.0
   - oxlint@1.70.0
+  - '@oxc-resolver/binding-android-arm-eabi@11.21.3'
+  - '@oxc-resolver/binding-android-arm64@11.21.3'
+  - '@oxc-resolver/binding-darwin-arm64@11.21.3'
+  - '@oxc-resolver/binding-darwin-x64@11.21.3'
+  - '@oxc-resolver/binding-freebsd-x64@11.21.3'
+  - '@oxc-resolver/binding-linux-arm-gnueabihf@11.21.3'
+  - '@oxc-resolver/binding-linux-arm-musleabihf@11.21.3'
+  - '@oxc-resolver/binding-linux-arm64-gnu@11.21.3'
+  - '@oxc-resolver/binding-linux-arm64-musl@11.21.3'
+  - '@oxc-resolver/binding-linux-ppc64-gnu@11.21.3'
+  - '@oxc-resolver/binding-linux-riscv64-gnu@11.21.3'
+  - '@oxc-resolver/binding-linux-riscv64-musl@11.21.3'
+  - '@oxc-resolver/binding-linux-s390x-gnu@11.21.3'
+  - '@oxc-resolver/binding-linux-x64-gnu@11.21.3'
+  - '@oxc-resolver/binding-linux-x64-musl@11.21.3'
+  - '@oxc-resolver/binding-openharmony-arm64@11.21.3'
+  - '@oxc-resolver/binding-wasm32-wasi@11.21.3'
+  - '@oxc-resolver/binding-win32-arm64-msvc@11.21.3'
+  - '@oxc-resolver/binding-win32-x64-msvc@11.21.3'
+  - oxc-resolver@11.21.3

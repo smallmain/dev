@@ -1,4 +1,8 @@
+import { definePlugin, eslintCompatPlugin } from "@oxlint/plugins";
+import type { Plugin } from "@oxlint/plugins";
 import { parseSync } from "oxc-parser";
+import { ResolverFactory } from "oxc-resolver";
+import type { NapiResolveOptions } from "oxc-resolver";
 
 const PLUGIN_NAME = "consistent-esm-default-name";
 const DEFAULT_IGNORE_SPECIFIERS = [] as const;
@@ -16,6 +20,32 @@ const FORMAT_NAMES = [
 const DEFAULT_TEMPLATE = [
   { match: ".*", format: "typescript" },
 ] as const satisfies readonly TemplateEntry[];
+const RESOLVE_OPTIONS = {
+  builtinModules: true,
+  conditionNames: ["types", "node", "import", "default"],
+  extensionAlias: {
+    ".cjs": [".cts", ".cjs"],
+    ".js": [".ts", ".tsx", ".d.ts", ".js"],
+    ".jsx": [".tsx", ".jsx"],
+    ".mjs": [".mts", ".mjs"],
+  },
+  extensions: [
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    ".d.ts",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".json",
+  ],
+  mainFields: ["types", "typings", "module", "jsnext:main", "main"],
+  mainFiles: ["index"],
+  moduleType: true,
+  tsconfig: "auto",
+} as const satisfies NapiResolveOptions;
 const IDENTIFIER_PATTERN = /^[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*$/u;
 const DIRECTORY_ENTRY_PATTERN = /^\.{1,2}(?:[/\\]\.{1,2})*[/\\]?$/u;
 const RESERVED_WORDS = new Set([
@@ -148,6 +178,11 @@ type ParsedModule = {
   };
 };
 
+type ParsedModuleCacheEntry = {
+  parsedModule: ParsedModule | null;
+  sourceText: string;
+};
+
 type TokenNode = {
   range?: unknown;
   type?: unknown;
@@ -188,6 +223,7 @@ type ReportDescriptor = {
 
 type RuleContext = {
   cwd?: string;
+  getCwd?: () => string;
   getFilename?: () => string;
   getPhysicalFilename?: () => string;
   getSourceCode?: () => SourceCode | undefined;
@@ -207,13 +243,8 @@ type ImportTarget = DerivedNameInput & {
 };
 
 type FsModule = {
-  existsSync: (filePath: string) => boolean;
   lstatSync: (filePath: string) => { isDirectory: () => boolean; isFile: () => boolean };
   readFileSync: (filePath: string, encoding: "utf8") => string;
-};
-
-type ModuleModule = {
-  builtinModules?: readonly string[];
 };
 
 type PathModule = {
@@ -225,11 +256,12 @@ declare const process:
       cwd?: () => string;
       getBuiltinModule?: {
         (specifier: "node:fs"): FsModule;
-        (specifier: "node:module"): ModuleModule;
         (specifier: "node:path"): PathModule;
       };
     }
   | undefined;
+
+const parsedModuleCache = new Map<string, ParsedModuleCacheEntry>();
 
 function getSourceCode(context: RuleContext): SourceCode | undefined {
   return context.sourceCode ?? context.getSourceCode?.();
@@ -389,16 +421,8 @@ function resolvePath(fromDirectory: string, toPath: string): string {
   );
 }
 
-function isRelativeSpecifier(specifierPath: string): boolean {
-  return specifierPath === "." || specifierPath === ".." || specifierPath.startsWith("./") || specifierPath.startsWith("../");
-}
-
-function isPackageLikeSpecifier(specifierPath: string): boolean {
-  return !isRelativeSpecifier(specifierPath) && !specifierPath.startsWith("/") && !specifierPath.startsWith("~");
-}
-
 function getCwd(context: RuleContext): string {
-  return context.cwd ?? process?.cwd?.() ?? ".";
+  return context.cwd ?? context.getCwd?.() ?? process?.cwd?.() ?? ".";
 }
 
 function matchesGlob(value: string, pattern: string): boolean {
@@ -430,25 +454,9 @@ function getFs(): FsModule | undefined {
   return process?.getBuiltinModule?.("node:fs");
 }
 
-function fileExists(filePath: string): boolean {
-  try {
-    return getFs()?.lstatSync(filePath).isFile() ?? false;
-  } catch {
-    return false;
-  }
-}
-
-function directoryExists(filePath: string): boolean {
-  try {
-    return getFs()?.lstatSync(filePath).isDirectory() ?? false;
-  } catch {
-    return false;
-  }
-}
-
 function readJsonFile(filePath: string): Record<string, unknown> | null {
   const fs = getFs();
-  if (!fs || !fileExists(filePath)) {
+  if (!fs) {
     return null;
   }
 
@@ -463,7 +471,7 @@ function readJsonFile(filePath: string): Record<string, unknown> | null {
 
 function readTextFile(filePath: string): string | null {
   const fs = getFs();
-  if (!fs || !fileExists(filePath)) {
+  if (!fs) {
     return null;
   }
 
@@ -474,189 +482,17 @@ function readTextFile(filePath: string): string | null {
   }
 }
 
-function isBuiltinSpecifier(specifierPath: string): boolean {
-  const normalized = specifierPath.startsWith("node:") ? specifierPath.slice(5) : specifierPath;
-  const builtins = process?.getBuiltinModule?.("node:module").builtinModules ?? [];
-
-  return builtins.includes(normalized) || builtins.includes(`node:${normalized}`);
-}
-
-function getPackageParts(specifierPath: string): { packageName: string; subpath: string } {
-  const parts = normalizePathSeparators(specifierPath).split("/");
-  if (specifierPath.startsWith("@")) {
-    return {
-      packageName: parts.slice(0, 2).join("/"),
-      subpath: parts.slice(2).join("/"),
-    };
-  }
-
-  return {
-    packageName: parts[0] ?? specifierPath,
-    subpath: parts.slice(1).join("/"),
-  };
-}
-
-function findPackageDirectory(packageName: string, fromDirectory: string): string | null {
-  let current = normalizeAbsolutePath(fromDirectory);
-
-  while (true) {
-    const packageDirectory = joinPath(current, "node_modules", packageName);
-    if (directoryExists(packageDirectory)) {
-      return packageDirectory;
-    }
-
-    const parent = dirname(current);
-    if (parent === current || parent === ".") {
-      return null;
-    }
-
-    current = parent;
-  }
-}
-
-function toStringArray(value: unknown): string[] {
-  if (typeof value === "string") {
-    return [value];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap(toStringArray);
-  }
-
-  return [];
-}
-
-function resolveExportTarget(exportsValue: unknown, subpath: string): string[] {
-  if (typeof exportsValue === "string" || Array.isArray(exportsValue)) {
-    return subpath === "." ? toStringArray(exportsValue) : [];
-  }
-
-  if (typeof exportsValue !== "object" || exportsValue === null) {
-    return [];
-  }
-
-  const exportsRecord = exportsValue as Record<string, unknown>;
-  const directTarget = exportsRecord[subpath];
-  if (directTarget !== undefined) {
-    const direct = resolveExportTarget(directTarget, ".");
-    if (direct.length > 0) {
-      return direct;
-    }
-  }
-
-  for (const condition of ["types", "import", "default", "module", "browser", "node", "require"]) {
-    const conditional = resolveExportTarget(exportsRecord[condition], subpath);
-    if (conditional.length > 0) {
-      return conditional;
-    }
-  }
-
-  return [];
-}
-
-const FILE_EXTENSIONS = [
-  "",
-  ".ts",
-  ".tsx",
-  ".mts",
-  ".cts",
-  ".d.ts",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-] as const;
-
-const INDEX_FILES = [
-  "index.ts",
-  "index.tsx",
-  "index.mts",
-  "index.cts",
-  "index.d.ts",
-  "index.js",
-  "index.jsx",
-  "index.mjs",
-  "index.cjs",
-] as const;
-
-function resolveFile(candidatePath: string): string | null {
-  for (const extension of FILE_EXTENSIONS) {
-    const filePath = `${candidatePath}${extension}`;
-    if (fileExists(filePath)) {
-      return normalizeAbsolutePath(filePath);
-    }
-  }
-
-  if (directoryExists(candidatePath)) {
-    const packageJson = readJsonFile(joinPath(candidatePath, "package.json"));
-    for (const field of ["types", "typings", "module", "jsnext:main", "main"]) {
-      const fieldValue = packageJson?.[field];
-      if (typeof fieldValue === "string") {
-        const resolved = resolveFile(resolvePath(candidatePath, fieldValue));
-        if (resolved) {
-          return resolved;
-        }
-      }
-    }
-
-    for (const indexFile of INDEX_FILES) {
-      const filePath = joinPath(candidatePath, indexFile);
-      if (fileExists(filePath)) {
-        return normalizeAbsolutePath(filePath);
-      }
-    }
-  }
-
-  return null;
-}
-
-function resolvePackageSpecifier(specifierPath: string, importerDirectory: string): string | null {
-  if (!isPackageLikeSpecifier(specifierPath) || isBuiltinSpecifier(specifierPath)) {
-    return null;
-  }
-
-  const { packageName, subpath } = getPackageParts(specifierPath);
-  const packageDirectory = findPackageDirectory(packageName, importerDirectory);
-  if (!packageDirectory) {
-    return null;
-  }
-
-  const packageJson = readJsonFile(joinPath(packageDirectory, "package.json"));
-  const exportSubpath = subpath ? `./${subpath}` : ".";
-  const exportTargets = resolveExportTarget(packageJson?.exports, exportSubpath);
-  for (const exportTarget of exportTargets) {
-    const resolved = resolveFile(resolvePath(packageDirectory, exportTarget));
-    if (resolved) {
-      return resolved;
-    }
-  }
-
-  if (subpath) {
-    return resolveFile(joinPath(packageDirectory, subpath));
-  }
-
-  for (const field of ["types", "typings", "module", "jsnext:main", "main"]) {
-    const fieldValue = packageJson?.[field];
-    if (typeof fieldValue === "string") {
-      const resolved = resolveFile(resolvePath(packageDirectory, fieldValue));
-      if (resolved) {
-        return resolved;
-      }
-    }
-  }
-
-  return resolveFile(packageDirectory);
-}
-
 function resolveImportSpecifier(specifier: string, importerFilename: string): string | null {
   const specifierPath = splitSpecifierPath(specifier);
-  const importerDirectory = dirname(importerFilename);
 
-  if (isRelativeSpecifier(specifierPath) || specifierPath.startsWith("/")) {
-    return resolveFile(resolvePath(importerDirectory, specifierPath));
+  try {
+    const resolver = new ResolverFactory(RESOLVE_OPTIONS);
+    const result = resolver.resolveFileSync(importerFilename, specifierPath);
+
+    return typeof result.path === "string" ? normalizeAbsolutePath(result.path) : null;
+  } catch {
+    return null;
   }
-
-  return resolvePackageSpecifier(specifierPath, importerDirectory);
 }
 
 function isIndexBasename(value: string): boolean {
@@ -1082,13 +918,24 @@ function parseModule(filePath: string): ParsedModule | null {
     return null;
   }
 
+  const cached = parsedModuleCache.get(filePath);
+  if (cached && cached.sourceText === sourceText) {
+    return cached.parsedModule;
+  }
+
   try {
-    return parseSync(filePath, sourceText, {
+    const parsedModule = parseSync(filePath, sourceText, {
       astType: "ts",
       preserveParens: true,
       sourceType: "module",
     }) as ParsedModule;
+
+    parsedModuleCache.set(filePath, { parsedModule, sourceText });
+
+    return parsedModule;
   } catch {
+    parsedModuleCache.set(filePath, { parsedModule: null, sourceText });
+
     return null;
   }
 }
@@ -1152,7 +999,10 @@ function getDefaultExportNameFromFile(filePath: string, seen = new Set<string>()
   return getDefaultExportNameFromParsedModule(parsedModule, normalizedPath, seen);
 }
 
-function getExpectedImportName(importTarget: ImportTarget, template: readonly TemplateEntry[]): string {
+function getExpectedImportName(
+  importTarget: ImportTarget,
+  template: readonly TemplateEntry[],
+): string {
   if (importTarget.path) {
     const exportedName = getDefaultExportNameFromFile(importTarget.path);
     if (exportedName) {
@@ -1178,14 +1028,13 @@ const defaultImportNameRule = {
     schema: [],
   },
 
-  create(context: RuleContext) {
-    const settings = getPluginSettings(context);
-    const ignoredPaths = settings.ignorePaths;
-    const ignoredSpecifiers = settings.ignoreSpecifiers ?? DEFAULT_IGNORE_SPECIFIERS;
-    const template = getTemplateEntries(settings);
-
+  createOnce(context: RuleContext) {
     return {
       ImportDeclaration(node: ImportDeclarationNode) {
+        const settings = getPluginSettings(context);
+        const ignoredPaths = settings.ignorePaths;
+        const ignoredSpecifiers = settings.ignoreSpecifiers ?? DEFAULT_IGNORE_SPECIFIERS;
+        const template = getTemplateEntries(settings);
         const filename = getFilename(context);
         const specifier = node.source?.value;
         if (!filename || typeof specifier !== "string" || isIgnoredSpecifier(specifier, ignoredSpecifiers)) {
@@ -1246,13 +1095,12 @@ const defaultExportNameRule = {
     schema: [],
   },
 
-  create(context: RuleContext) {
-    const settings = getPluginSettings(context);
-    const ignoredPaths = settings.ignorePaths;
-    const template = getTemplateEntries(settings);
-
+  createOnce(context: RuleContext) {
     return {
       Program(node: AstNode) {
+        const settings = getPluginSettings(context);
+        const ignoredPaths = settings.ignorePaths;
+        const template = getTemplateEntries(settings);
         const filename = getFilename(context);
         if (!filename || isIgnoredPath(filename, ignoredPaths, context)) {
           return;
@@ -1284,7 +1132,7 @@ const defaultExportNameRule = {
   },
 };
 
-const plugin = {
+const plugin = eslintCompatPlugin(definePlugin({
   meta: {
     name: PLUGIN_NAME,
   },
@@ -1292,6 +1140,6 @@ const plugin = {
     "default-import-name": defaultImportNameRule,
     "default-export-name": defaultExportNameRule,
   },
-};
+} as Plugin));
 
 export default plugin;
