@@ -1,6 +1,6 @@
 import { defineConfig } from "oxlint";
-import generic from "@smallmains/dev/oxlint/generic.js";
+import generic{{oxlintNamedImports}} from "@smallmains/dev/oxlint/generic.js";
 
 export default defineConfig({
-  extends: [generic],
+  extends: [generic{{oxlintExtends}}],
 });

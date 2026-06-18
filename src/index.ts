@@ -25,13 +25,22 @@ async function main(): Promise<void> {
     .option("--zh-description <description>", "Chinese description.")
     .option("--github-owner <owner>", "GitHub repository owner.")
     .option("--github-repo <repo>", "GitHub repository name.")
-    .option("--author-name <name>", "Author name.")
-    .option("--author-email <email>", "Author email.")
-    .option("--author-url <url>", "Author URL.")
-    .option("--license-year <year>", "License year.")
-    .option("--stack <stack>", "Tech stack. Repeat or use commas for multiple values.", collectOption, [])
-    .option("--preset <preset>", "Web preset. Currently supports npm-package.")
-    .option("--component <component>", "Web component. Repeat or use commas for multiple values.", collectOption, [])
+    .option("--runtime <runtime>", "Runtime environment. Supports neutral, browser, nodejs.")
+    .option("--node-version <version>", "Node.js version when runtime is nodejs.")
+    .option("--css <css>", "CSS mode when component css is enabled. Supports native, css-modules, tailwind.")
+    .option(
+      "--stack <stack>",
+      "Tech stack. Repeat or use commas for multiple values.",
+      collectOption,
+      [],
+    )
+    .option("--preset <preset>", "Preset. Currently supports npm-package.")
+    .option(
+      "--component <component>",
+      "Component. Supports vitest, css, react, security. Repeat or use commas for multiple values.",
+      collectOption,
+      [],
+    )
     .action(options => runCreateCommand(options, packageJson));
 
   program

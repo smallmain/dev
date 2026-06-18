@@ -1,6 +1,8 @@
+import { spawn } from "node:child_process";
 import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { checkbox, input, select } from "@inquirer/prompts";
+import { stdin, stdout } from "node:process";
+import { emitKeypressEvents } from "node:readline";
 import {
   getAuthor,
   getDependencyVersion,
@@ -16,10 +18,9 @@ interface RawCreateOptions {
   zhDescription?: string;
   githubOwner?: string;
   githubRepo?: string;
-  authorName?: string;
-  authorEmail?: string;
-  authorUrl?: string;
-  licenseYear?: string;
+  runtime?: string;
+  nodeVersion?: string;
+  css?: string;
   stack?: string[];
   preset?: string;
   component?: string[];
@@ -33,16 +34,86 @@ interface CreateContext {
   zhDescription: string;
   githubOwner: string;
   githubRepo: string;
-  authorName: string;
-  authorEmail: string;
-  authorUrl: string;
-  licenseYear: string;
+  runtime: Runtime;
+  nodeVersion: string;
+  cssComponent: CssComponent;
   stacks: string[];
   webPreset: string;
   webComponents: string[];
 }
 
+interface CreateDefaults {
+  packageName: string;
+  displayName: string;
+  description: string;
+  zhName: string;
+  zhDescription: string;
+  githubOwner: string;
+  githubRepo: string;
+  runtime: Runtime;
+  nodeVersion: string;
+  cssComponent: CssComponent;
+}
+
 type TemplateValues = Record<string, string>;
+type Runtime = "neutral" | "browser" | "nodejs";
+type CssComponent = "native" | "css-modules" | "tailwind";
+
+type FormField =
+  | "packageName"
+  | "description"
+  | "zhName"
+  | "zhDescription"
+  | "githubOwner"
+  | "githubRepo"
+  | "nodeVersion"
+  | "runtime"
+  | "cssComponent"
+  | "stacks"
+  | "webPreset"
+  | "webComponents";
+type TextFormField = Exclude<
+  FormField,
+  "runtime" | "cssComponent" | "stacks" | "webPreset" | "webComponents"
+>;
+
+interface TextFormItem {
+  kind: "text";
+  field: TextFormField;
+  label: string;
+}
+
+interface ToggleFormItem {
+  kind: "toggle";
+  field: "stacks" | "webComponents";
+  label: string;
+  choices: { label: string; value: string }[];
+}
+
+interface SelectFormItem {
+  kind: "select";
+  field: "runtime" | "cssComponent" | "webPreset";
+  label: string;
+  choices: { label: string; value: string }[];
+}
+
+type FormItem = TextFormItem | ToggleFormItem | SelectFormItem;
+type ChoiceFormItem = ToggleFormItem | SelectFormItem;
+type ChoiceFormField = ChoiceFormItem["field"];
+
+interface KeypressKey {
+  name?: string;
+  ctrl?: boolean;
+  meta?: boolean;
+  shift?: boolean;
+}
+
+interface FormState {
+  cursor: number;
+  message: string;
+  choiceCursors: Partial<Record<ChoiceFormField, number>>;
+  textCursors: Partial<Record<TextFormField, number>>;
+}
 
 const commonTemplateDir = path.join(packageRootDir, "templates/common");
 const commonConfigDir = path.join(packageRootDir, "configs/common");
@@ -50,7 +121,9 @@ const webNpmPackageTemplateDir = path.join(packageRootDir, "templates/web/npm-pa
 
 const supportedStacks = new Set(["web"]);
 const supportedWebPresets = new Set(["npm-package"]);
-const supportedWebComponents = new Set(["css"]);
+const supportedWebComponents = new Set(["css", "react", "security", "vitest"]);
+const supportedRuntimes = new Set<Runtime>(["neutral", "browser", "nodejs"]);
+const supportedCssComponents = new Set<CssComponent>(["native", "css-modules", "tailwind"]);
 const defaultDevEngines = {
   packageManager: {
     name: "pnpm",
@@ -88,15 +161,14 @@ export async function runCreateCommand(
   await writePreCommitHook(targetDir, context);
   await writeVsCodeConfig(targetDir, context);
 
-  if (context.webComponents.includes("css")) {
-    await writeFile(
-      path.join(targetDir, "stylelint.config.ts"),
-      'import type { Config } from "stylelint";\n\nexport default {\n  extends: "@smallmains/dev/stylelint/generic.js",\n} satisfies Config;\n',
-    );
+  if (hasCssComponent(context)) {
+    await writeFile(path.join(targetDir, "stylelint.config.ts"), createStylelintConfig(context));
   }
 
+  console.log("Installing dependencies with pnpm...");
+  await runCommand("pnpm", ["install"], targetDir);
+
   console.log(`Created ${context.packageName} in ${targetDir}`);
-  console.log("Next steps: pnpm install && pnpm run lint");
 }
 
 async function resolveCreateContext(
@@ -106,152 +178,38 @@ async function resolveCreateContext(
   const yes = options.yes === true;
   const cwdName = path.basename(process.cwd());
   const defaultPackageName = toPackageName(cwdName);
-  const packageName = await resolveText(options.name, "Package name", defaultPackageName, yes);
-  const displayName = toDisplayName(packageName);
-  const description = await resolveText(
-    options.description,
-    "English description",
-    "Description.",
-    yes,
-  );
-  const zhName = await resolveText(options.zhName, "中文名称", displayName, yes);
-  const zhDescription = await resolveText(options.zhDescription, "中文描述", "描述。", yes);
-  const githubOwner = await resolveText(options.githubOwner, "GitHub owner", "smallmain", yes);
-  const githubRepo = await resolveText(
-    options.githubRepo,
-    "GitHub repository",
-    toRepoName(packageName),
-    yes,
-  );
-  const author = getAuthor(packageJson);
-  const authorName = await resolveText(options.authorName, "Author name", author.name, yes);
-  const authorEmail = await resolveText(options.authorEmail, "Author email", author.email, yes);
-  const authorUrl = await resolveText(options.authorUrl, "Author URL", author.url, yes);
-  const licenseYear = await resolveText(
-    options.licenseYear,
-    "License year",
-    String(new Date().getFullYear()),
-    yes,
-  );
-  const stacks = await resolveStacks(options.stack, yes);
+  const packageName = options.name ?? defaultPackageName;
+  const defaults: CreateDefaults = {
+    packageName,
+    displayName: toDisplayName(packageName),
+    description: options.description ?? "Description.",
+    zhName: options.zhName ?? "名称",
+    zhDescription: options.zhDescription ?? "描述。",
+    githubOwner: options.githubOwner ?? "smallmain",
+    githubRepo: options.githubRepo ?? toRepoName(packageName),
+    runtime: resolveRuntime(options.runtime),
+    nodeVersion: options.nodeVersion ?? createDefaultNodeVersion(packageJson),
+    cssComponent: resolveCssComponent(options.css),
+  };
+  const defaultContext: CreateContext = {
+    ...defaults,
+    stacks: resolveOptionValues(options.stack, ["web"], supportedStacks, "stack"),
+    webPreset: resolveOptionValue(options.preset, "npm-package", supportedWebPresets, "preset"),
+    webComponents: resolveOptionValues(options.component, ["vitest"], supportedWebComponents, "component"),
+  };
 
-  if (!stacks.includes("web")) {
-    throw new Error("At least one supported stack is required. Currently only web is supported.");
+  if (yes || !stdin.isTTY || !stdout.isTTY) {
+    validateCreateContext(defaultContext);
+    return defaultContext;
   }
 
-  const webPreset = await resolveWebPreset(options.preset, yes);
-  const webComponents = await resolveWebComponents(options.component, yes);
+  const context = await runCreateForm(defaultContext);
+  validateCreateContext(context);
 
   return {
-    packageName,
-    displayName,
-    description,
-    zhName,
-    zhDescription,
-    githubOwner,
-    githubRepo,
-    authorName,
-    authorEmail,
-    authorUrl,
-    licenseYear,
-    stacks,
-    webPreset,
-    webComponents,
+    ...context,
+    displayName: toDisplayName(context.packageName),
   };
-}
-
-async function resolveText(
-  value: string | undefined,
-  message: string,
-  defaultValue: string,
-  yes: boolean,
-): Promise<string> {
-  if (value !== undefined) {
-    return value;
-  }
-
-  if (yes) {
-    return defaultValue;
-  }
-
-  return input({
-    message,
-    default: defaultValue,
-    validate: answer => answer.trim().length > 0 || "Value is required.",
-  });
-}
-
-async function resolveStacks(stackOptions: string[] | undefined, yes: boolean): Promise<string[]> {
-  const stacks = normalizeOptions(stackOptions);
-
-  if (stacks.length > 0) {
-    validateOptions(stacks, supportedStacks, "stack");
-    return stacks;
-  }
-
-  if (yes) {
-    return ["web"];
-  }
-
-  return checkbox({
-    message: "Select tech stacks",
-    required: true,
-    choices: [
-      {
-        name: "Web",
-        value: "web",
-        checked: true,
-      },
-    ],
-  });
-}
-
-async function resolveWebPreset(preset: string | undefined, yes: boolean): Promise<string> {
-  if (preset) {
-    validateOptions([preset], supportedWebPresets, "web preset");
-    return preset;
-  }
-
-  if (yes) {
-    return "npm-package";
-  }
-
-  return select({
-    message: "Select Web preset",
-    choices: [
-      {
-        name: "npm package",
-        value: "npm-package",
-      },
-    ],
-  });
-}
-
-async function resolveWebComponents(
-  componentOptions: string[] | undefined,
-  yes: boolean,
-): Promise<string[]> {
-  const components = normalizeOptions(componentOptions);
-
-  if (components.length > 0) {
-    validateOptions(components, supportedWebComponents, "web component");
-    return components;
-  }
-
-  if (yes) {
-    return [];
-  }
-
-  return checkbox({
-    message: "Select Web components",
-    choices: [
-      {
-        name: "css (Stylelint)",
-        value: "css",
-        checked: false,
-      },
-    ],
-  });
 }
 
 function normalizeOptions(values: string[] | undefined): string[] {
@@ -265,6 +223,52 @@ function normalizeOptions(values: string[] | undefined): string[] {
   ];
 }
 
+function resolveOptionValues(
+  values: string[] | undefined,
+  defaultValues: string[],
+  supportedValues: Set<string>,
+  label: string,
+): string[] {
+  const resolvedValues = normalizeOptions(values);
+
+  if (resolvedValues.length === 0) {
+    return defaultValues;
+  }
+
+  validateOptions(resolvedValues, supportedValues, label);
+  return resolvedValues;
+}
+
+function resolveOptionValue(
+  value: string | undefined,
+  defaultValue: string,
+  supportedValues: Set<string>,
+  label: string,
+): string {
+  if (!value) {
+    return defaultValue;
+  }
+
+  validateOptions([value], supportedValues, label);
+  return value;
+}
+
+function resolveRuntime(value: string | undefined): Runtime {
+  if (!value) {
+    return "neutral";
+  }
+
+  validateOptions([value], supportedRuntimes, "runtime");
+  return value as Runtime;
+}
+
+function resolveCssComponent(value: string | undefined): CssComponent {
+  const cssComponent = value ?? "native";
+
+  validateOptions([cssComponent], supportedCssComponents, "css component");
+  return cssComponent as CssComponent;
+}
+
 function validateOptions(values: string[], supportedValues: Set<string>, label: string): void {
   const unsupportedValues = values.filter(value => !supportedValues.has(value));
 
@@ -273,20 +277,695 @@ function validateOptions(values: string[], supportedValues: Set<string>, label: 
   }
 }
 
+function validateCreateContext(context: CreateContext): void {
+  const requiredFields: Array<[string, string]> = [
+    ["Package name", context.packageName],
+    ["English description", context.description],
+    ["Chinese Name", context.zhName],
+    ["Chinese Description", context.zhDescription],
+    ["GitHub owner", context.githubOwner],
+    ["GitHub repository", context.githubRepo],
+  ];
+  const missingField = requiredFields.find(([, value]) => value.trim().length === 0);
+
+  if (missingField) {
+    throw new Error(`${missingField[0]} is required.`);
+  }
+
+  validateOptions(context.stacks, supportedStacks, "stack");
+  validateOptions([context.webPreset], supportedWebPresets, "preset");
+  validateOptions(context.webComponents, supportedWebComponents, "component");
+  validateOptions([context.runtime], supportedRuntimes, "runtime");
+  validateOptions([context.cssComponent], supportedCssComponents, "css component");
+
+  if (!context.stacks.includes("web")) {
+    throw new Error("At least one supported stack is required. Currently only web is supported.");
+  }
+
+  if (context.runtime === "nodejs") {
+    validateNodeVersion(context.nodeVersion);
+  }
+}
+
+function validateNodeVersion(version: string): void {
+  if (!/^(?:\d+|\d+\.\d+\.\d+)$/.test(version.trim())) {
+    throw new Error("Node version must be like 22 or 22.1.1.");
+  }
+}
+
+async function runCreateForm(initialContext: CreateContext): Promise<CreateContext> {
+  const context = { ...initialContext };
+  const state: FormState = {
+    cursor: 0,
+    message:
+      "Enter: create  Esc/Ctrl+C: cancel  Up/Down: field  Left/Right: option  Space: toggle/select",
+    choiceCursors: {},
+    textCursors: {},
+  };
+  const previousRawMode = stdin.isRaw;
+
+  emitKeypressEvents(stdin);
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdout.write("\x1B[?25l");
+
+  return new Promise((resolve, reject) => {
+    const getItems = (): FormItem[] => createFormItems(context);
+    const cleanup = (): void => {
+      stdin.off("keypress", onKeypress);
+      stdin.setRawMode(previousRawMode);
+      stdout.write("\x1B[?25h");
+      stdout.write("\n");
+    };
+    const render = (): void => {
+      const items = getItems();
+      state.cursor = Math.min(state.cursor, items.length - 1);
+      renderCreateForm(context, items, state);
+    };
+    const submit = (): void => {
+      try {
+        validateCreateContext(context);
+        cleanup();
+        resolve(context);
+      } catch (error) {
+        state.message = error instanceof Error ? error.message : String(error);
+        render();
+      }
+    };
+    const onKeypress = (character: string | undefined, key: KeypressKey): void => {
+      const items = getItems();
+      state.cursor = Math.min(state.cursor, items.length - 1);
+      const item = items[state.cursor];
+
+      if ((key.ctrl && key.name === "c") || key.name === "escape") {
+        cleanup();
+        reject(new Error("Create cancelled."));
+        return;
+      }
+
+      if (key.name === "up") {
+        state.cursor = (state.cursor + items.length - 1) % items.length;
+        render();
+        return;
+      }
+
+      if (key.name === "down" || key.name === "tab") {
+        state.cursor = (state.cursor + 1) % items.length;
+        render();
+        return;
+      }
+
+      if (key.name === "return") {
+        submit();
+        return;
+      }
+
+      if (item.kind === "text") {
+        if (handleTextKeypress(context, item.field, state, character, key)) {
+          render();
+        }
+        return;
+      }
+
+      if ((item.kind === "toggle" || item.kind === "select") && key.name === "space") {
+        if (item.kind === "toggle") {
+          toggleFocusedFormValue(context, item, state);
+        } else {
+          moveChoiceCursor(context, item, state, 1);
+        }
+        render();
+        return;
+      }
+
+      if (
+        (item.kind === "toggle" || item.kind === "select") &&
+        (key.name === "left" || key.name === "right")
+      ) {
+        moveChoiceCursor(context, item, state, key.name === "left" ? -1 : 1);
+        render();
+        return;
+      }
+
+      return;
+    };
+
+    stdin.on("keypress", onKeypress);
+    render();
+  });
+}
+
+function createFormItems(context: CreateContext): FormItem[] {
+  const items: FormItem[] = [
+    { kind: "text", field: "packageName", label: "Package name" },
+    { kind: "text", field: "description", label: "Description" },
+    { kind: "text", field: "zhName", label: "Chinese Name" },
+    { kind: "text", field: "zhDescription", label: "Chinese Description" },
+    { kind: "text", field: "githubOwner", label: "GitHub owner" },
+    { kind: "text", field: "githubRepo", label: "GitHub repo" },
+    {
+      kind: "toggle",
+      field: "stacks",
+      label: "Stack",
+      choices: [{ label: "Web", value: "web" }],
+    },
+    {
+      kind: "select",
+      field: "webPreset",
+      label: "Preset",
+      choices: [{ label: "Package", value: "npm-package" }],
+    },
+    {
+      kind: "select",
+      field: "runtime",
+      label: "Runtime",
+      choices: [
+        { label: "Neutral", value: "neutral" },
+        { label: "Browser", value: "browser" },
+        { label: "Node.js", value: "nodejs" },
+      ],
+    },
+  ];
+
+  if (context.runtime === "nodejs") {
+    items.push({ kind: "text", field: "nodeVersion", label: "Node version" });
+  }
+
+  items.push(
+    {
+      kind: "toggle",
+      field: "webComponents",
+      label: "Components",
+      choices: [
+        { label: "Vitest", value: "vitest" },
+        { label: "CSS", value: "css" },
+        { label: "React", value: "react" },
+        { label: "Security", value: "security" },
+      ],
+    },
+  );
+
+  if (hasCssComponent(context)) {
+    items.push({
+      kind: "select",
+      field: "cssComponent",
+      label: "CSS",
+      choices: [
+        { label: "Native", value: "native" },
+        { label: "CSS Modules", value: "css-modules" },
+        { label: "Tailwind CSS", value: "tailwind" },
+      ],
+    });
+  }
+
+  return items;
+}
+
+function renderCreateForm(
+  context: CreateContext,
+  items: FormItem[],
+  state: FormState,
+): void {
+  const lines = [
+    "\x1B[2J\x1B[H",
+    "Create Package",
+    "",
+    ...items.map((item, index) => renderFormItem(context, item, index === state.cursor, state)),
+    "",
+    state.message,
+  ];
+
+  stdout.write(lines.join("\n"));
+}
+
+function renderFormItem(
+  context: CreateContext,
+  item: FormItem,
+  active: boolean,
+  state: FormState,
+): string {
+  const marker = active ? ">" : " ";
+  const label = item.label.padEnd(20, " ");
+
+  if (item.kind === "text") {
+    const value = context[item.field];
+    const renderedValue = active
+      ? renderTextWithCursor(value, getTextCursor(context, item.field, state))
+      : value;
+
+    return `${marker} ${label} ${renderedValue}`;
+  }
+
+  if (item.kind === "toggle") {
+    const focusedIndex = getChoiceCursor(context, item, state);
+    const choices = item.choices
+      .map((choice, index) => {
+        const checked = context[item.field].includes(choice.value) ? "x" : " ";
+        return renderChoice(`[${checked}] ${choice.label}`, active && index === focusedIndex);
+      })
+      .join("  ");
+
+    return `${marker} ${label} ${choices}`;
+  }
+
+  const focusedIndex = getChoiceCursor(context, item, state);
+  const choices = item.choices
+    .map((choice, index) => {
+      const checked = context[item.field] === choice.value ? "x" : " ";
+      return renderChoice(`[${checked}] ${choice.label}`, active && index === focusedIndex);
+    })
+    .join("  ");
+
+  return `${marker} ${label} ${choices}`;
+}
+
+function handleTextKeypress(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+  character: string | undefined,
+  key: KeypressKey,
+): boolean {
+  if (isLineStartKey(key)) {
+    moveTextCursorTo(context, field, state, 0);
+    return true;
+  }
+
+  if (isLineEndKey(key)) {
+    moveTextCursorToEnd(context, field, state);
+    return true;
+  }
+
+  if (isWordLeftKey(key)) {
+    moveTextCursorTo(
+      context,
+      field,
+      state,
+      findPreviousWordCursor(context[field], getTextCursor(context, field, state)),
+    );
+    return true;
+  }
+
+  if (isWordRightKey(key)) {
+    moveTextCursorTo(
+      context,
+      field,
+      state,
+      findNextWordCursor(context[field], getTextCursor(context, field, state)),
+    );
+    return true;
+  }
+
+  if (isDeleteLineBeforeCursorKey(key)) {
+    deleteTextBeforeCursorToStart(context, field, state);
+    return true;
+  }
+
+  if (isDeleteLineAfterCursorKey(key)) {
+    deleteTextAfterCursorToEnd(context, field, state);
+    return true;
+  }
+
+  if (isDeleteWordBeforeCursorKey(key)) {
+    deleteTextBeforeCursorTo(
+      context,
+      field,
+      state,
+      findPreviousWordCursor(context[field], getTextCursor(context, field, state)),
+    );
+    return true;
+  }
+
+  if (isDeleteWordAtCursorKey(key)) {
+    deleteTextAtCursorTo(
+      context,
+      field,
+      state,
+      findNextWordCursor(context[field], getTextCursor(context, field, state)),
+    );
+    return true;
+  }
+
+  if (key.name === "left" || key.name === "right") {
+    moveTextCursor(context, field, state, key.name === "left" ? -1 : 1);
+    return true;
+  }
+
+  if (key.name === "backspace") {
+    deleteTextBeforeCursor(context, field, state);
+    return true;
+  }
+
+  if (key.name === "delete") {
+    deleteTextAtCursor(context, field, state);
+    return true;
+  }
+
+  if (character && !key.ctrl && !key.meta && character >= " ") {
+    insertTextAtCursor(context, field, state, character);
+    return true;
+  }
+
+  return false;
+}
+
+function getTextCursor(context: CreateContext, field: TextFormField, state: FormState): number {
+  const valueLength = getTextChars(context[field]).length;
+  const savedCursor = state.textCursors[field];
+
+  if (savedCursor === undefined) {
+    return valueLength;
+  }
+
+  return clamp(savedCursor, 0, valueLength);
+}
+
+function moveTextCursor(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+  direction: number,
+): void {
+  state.textCursors[field] = clamp(
+    getTextCursor(context, field, state) + direction,
+    0,
+    getTextChars(context[field]).length,
+  );
+}
+
+function moveTextCursorTo(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+  cursor: number,
+): void {
+  state.textCursors[field] = clamp(cursor, 0, getTextChars(context[field]).length);
+}
+
+function moveTextCursorToEnd(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+): void {
+  moveTextCursorTo(context, field, state, getTextChars(context[field]).length);
+}
+
+function insertTextAtCursor(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+  text: string,
+): void {
+  const chars = getTextChars(context[field]);
+  const cursor = getTextCursor(context, field, state);
+  const insertedChars = getTextChars(text);
+
+  chars.splice(cursor, 0, ...insertedChars);
+  context[field] = chars.join("");
+  state.textCursors[field] = cursor + insertedChars.length;
+  updateDerivedTextFields(context, field);
+}
+
+function deleteTextBeforeCursor(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+): void {
+  const chars = getTextChars(context[field]);
+  const cursor = getTextCursor(context, field, state);
+
+  if (cursor === 0) {
+    return;
+  }
+
+  chars.splice(cursor - 1, 1);
+  context[field] = chars.join("");
+  state.textCursors[field] = cursor - 1;
+  updateDerivedTextFields(context, field);
+}
+
+function deleteTextBeforeCursorToStart(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+): void {
+  deleteTextBeforeCursorTo(context, field, state, 0);
+}
+
+function deleteTextBeforeCursorTo(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+  startCursor: number,
+): void {
+  const chars = getTextChars(context[field]);
+  const cursor = getTextCursor(context, field, state);
+  const normalizedStartCursor = clamp(startCursor, 0, cursor);
+
+  chars.splice(normalizedStartCursor, cursor - normalizedStartCursor);
+  context[field] = chars.join("");
+  state.textCursors[field] = normalizedStartCursor;
+  updateDerivedTextFields(context, field);
+}
+
+function deleteTextAtCursor(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+): void {
+  const chars = getTextChars(context[field]);
+  const cursor = getTextCursor(context, field, state);
+
+  if (cursor >= chars.length) {
+    return;
+  }
+
+  chars.splice(cursor, 1);
+  context[field] = chars.join("");
+  state.textCursors[field] = cursor;
+  updateDerivedTextFields(context, field);
+}
+
+function deleteTextAfterCursorToEnd(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+): void {
+  deleteTextAtCursorTo(context, field, state, getTextChars(context[field]).length);
+}
+
+function deleteTextAtCursorTo(
+  context: CreateContext,
+  field: TextFormField,
+  state: FormState,
+  endCursor: number,
+): void {
+  const chars = getTextChars(context[field]);
+  const cursor = getTextCursor(context, field, state);
+  const normalizedEndCursor = clamp(endCursor, cursor, chars.length);
+
+  chars.splice(cursor, normalizedEndCursor - cursor);
+  context[field] = chars.join("");
+  state.textCursors[field] = cursor;
+  updateDerivedTextFields(context, field);
+}
+
+function updateDerivedTextFields(context: CreateContext, field: TextFormField): void {
+  if (field === "packageName") {
+    context.displayName = toDisplayName(context.packageName);
+  }
+}
+
+function renderTextWithCursor(value: string, cursor: number): string {
+  const chars = getTextChars(value);
+  const normalizedCursor = clamp(cursor, 0, chars.length);
+
+  return `${chars.slice(0, normalizedCursor).join("")}_${chars.slice(normalizedCursor).join("")}`;
+}
+
+function getTextChars(value: string): string[] {
+  return Array.from(value);
+}
+
+function findPreviousWordCursor(value: string, cursor: number): number {
+  const chars = getTextChars(value);
+  let index = clamp(cursor, 0, chars.length);
+
+  while (index > 0 && isWordSeparator(chars[index - 1] ?? "")) {
+    index -= 1;
+  }
+
+  while (index > 0 && !isWordSeparator(chars[index - 1] ?? "")) {
+    index -= 1;
+  }
+
+  return index;
+}
+
+function findNextWordCursor(value: string, cursor: number): number {
+  const chars = getTextChars(value);
+  let index = clamp(cursor, 0, chars.length);
+
+  while (index < chars.length && !isWordSeparator(chars[index] ?? "")) {
+    index += 1;
+  }
+
+  while (index < chars.length && isWordSeparator(chars[index] ?? "")) {
+    index += 1;
+  }
+
+  return index;
+}
+
+function isWordSeparator(value: string): boolean {
+  return !/[\p{L}\p{N}_]/u.test(value);
+}
+
+function isLineStartKey(key: KeypressKey): boolean {
+  return (
+    key.name === "home" ||
+    (hasModifierKey(key) && key.name === "a") ||
+    (key.meta === true && key.name === "left")
+  );
+}
+
+function isLineEndKey(key: KeypressKey): boolean {
+  return (
+    key.name === "end" ||
+    (hasModifierKey(key) && key.name === "e") ||
+    (key.meta === true && key.name === "right")
+  );
+}
+
+function isWordLeftKey(key: KeypressKey): boolean {
+  return hasModifierKey(key) && key.name === "b";
+}
+
+function isWordRightKey(key: KeypressKey): boolean {
+  return hasModifierKey(key) && key.name === "f";
+}
+
+function isDeleteLineBeforeCursorKey(key: KeypressKey): boolean {
+  return hasModifierKey(key) && key.name === "u";
+}
+
+function isDeleteLineAfterCursorKey(key: KeypressKey): boolean {
+  return hasModifierKey(key) && key.name === "k";
+}
+
+function isDeleteWordBeforeCursorKey(key: KeypressKey): boolean {
+  return hasModifierKey(key) && (key.name === "w" || key.name === "backspace");
+}
+
+function isDeleteWordAtCursorKey(key: KeypressKey): boolean {
+  return hasModifierKey(key) && key.name === "delete";
+}
+
+function hasModifierKey(key: KeypressKey): boolean {
+  return key.ctrl === true || key.meta === true;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function toggleFormValue(
+  context: CreateContext,
+  field: ToggleFormItem["field"],
+  value: string,
+): void {
+  const values = context[field];
+
+  context[field] = values.includes(value)
+    ? values.filter(item => item !== value)
+    : [...values, value];
+}
+
+function toggleFocusedFormValue(
+  context: CreateContext,
+  item: ToggleFormItem,
+  state: FormState,
+): void {
+  const focusedIndex = getChoiceCursor(context, item, state);
+  const value = item.choices[focusedIndex]?.value;
+
+  if (value) {
+    toggleFormValue(context, item.field, value);
+  }
+}
+
+function moveChoiceCursor(
+  context: CreateContext,
+  item: ChoiceFormItem,
+  state: FormState,
+  direction: number,
+): void {
+  const currentIndex = getChoiceCursor(context, item, state);
+  const nextIndex = (currentIndex + direction + item.choices.length) % item.choices.length;
+
+  state.choiceCursors[item.field] = nextIndex;
+
+  if (item.kind !== "select") {
+    return;
+  }
+
+  const nextValue = item.choices[nextIndex]?.value ?? item.choices[0]?.value ?? context[item.field];
+
+  if (item.field === "runtime") {
+    context.runtime = resolveRuntime(nextValue);
+    return;
+  }
+
+  if (item.field === "cssComponent") {
+    context.cssComponent = nextValue as CssComponent;
+    return;
+  }
+
+  context.webPreset = nextValue;
+}
+
+function getChoiceCursor(
+  context: CreateContext,
+  item: ChoiceFormItem,
+  state: FormState,
+): number {
+  const savedIndex = state.choiceCursors[item.field];
+
+  if (savedIndex !== undefined && savedIndex >= 0 && savedIndex < item.choices.length) {
+    return savedIndex;
+  }
+
+  if (item.kind === "select") {
+    const selectedIndex = item.choices.findIndex(choice => choice.value === context[item.field]);
+
+    return selectedIndex >= 0 ? selectedIndex : 0;
+  }
+
+  return 0;
+}
+
+function renderChoice(choice: string, focused: boolean): string {
+  return focused ? `\x1B[7m${choice}\x1B[27m` : choice;
+}
+
 function createProjectPackageJson(context: CreateContext, packageJson: PackageJson): unknown {
+  const author = getAuthor(packageJson);
   const scripts: Record<string, string> = {
     lint: "oxlint",
     "lint:fix": "oxlint --fix",
     prepare: "husky",
   };
 
-  if (context.webComponents.includes("css")) {
+  if (hasCssComponent(context)) {
     scripts.lint = "oxlint && pnpm run lint:style";
     scripts["lint:fix"] = "oxlint --fix && pnpm run lint:style:fix";
     scripts["lint:style"] =
       'stylelint "**/*.{css,scss,sass,less,pcss,html,vue,svelte,astro,md,mdx}"';
     scripts["lint:style:fix"] =
       'stylelint "**/*.{css,scss,sass,less,pcss,html,vue,svelte,astro,md,mdx}" --fix';
+  }
+
+  if (context.webComponents.includes("vitest")) {
+    scripts.test = "vitest";
   }
 
   const devDependencies: Record<string, string> = {
@@ -299,29 +978,33 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
     typescript: getDependencyVersion(packageJson, "typescript"),
   };
 
-  if (context.webComponents.includes("css")) {
+  if (hasCssComponent(context)) {
     devDependencies.stylelint = getDependencyVersion(packageJson, "stylelint");
   }
 
-  return {
+  if (context.webComponents.includes("vitest")) {
+    devDependencies.vitest = getDependencyVersion(packageJson, "vitest");
+  }
+
+  if (context.runtime === "nodejs") {
+    devDependencies["@types/node"] = getDependencyVersion(packageJson, "@types/node");
+  }
+
+  const projectPackageJson: Record<string, unknown> = {
     name: context.packageName,
     version: "1.0.0",
     description: context.description,
-    homepage: `https://github.com/${context.githubOwner}/${context.githubRepo}#readme`,
+    homepage: `https://github.com/${context.githubOwner}/${context.githubRepo}`,
     bugs: {
       url: `https://github.com/${context.githubOwner}/${context.githubRepo}/issues`,
     },
     license: "MIT",
-    author: {
-      name: context.authorName,
-      email: context.authorEmail,
-      url: context.authorUrl,
-    },
+    author,
     repository: {
       type: "git",
       url: `git+https://github.com/${context.githubOwner}/${context.githubRepo}.git`,
     },
-    funding: "https://github.com/sponsors/smallmain",
+    funding: packageJson.funding,
     publishConfig: {
       access: "public",
     },
@@ -329,9 +1012,22 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
     devDependencies,
     devEngines: packageJson.devEngines ?? defaultDevEngines,
   };
+
+  if (context.runtime === "nodejs") {
+    projectPackageJson.engines = {
+      node: createNodeEngineVersion(context.nodeVersion),
+    };
+  }
+
+  return projectPackageJson;
 }
 
 function createTemplateValues(context: CreateContext, packageJson: PackageJson): TemplateValues {
+  const author = getAuthor(packageJson);
+  const oxlintParts = createOxlintParts(context);
+  const oxlintNamedImports = oxlintParts.length > 0 ? `, { ${oxlintParts.join(", ")} }` : "";
+  const oxlintExtends = oxlintParts.length > 0 ? `, ${oxlintParts.join(", ")}` : "";
+
   return {
     packageName: context.packageName,
     displayName: context.displayName,
@@ -340,13 +1036,13 @@ function createTemplateValues(context: CreateContext, packageJson: PackageJson):
     zhDescription: context.zhDescription,
     githubOwner: context.githubOwner,
     githubRepo: context.githubRepo,
-    authorName: context.authorName,
-    authorEmail: context.authorEmail,
-    authorUrl: context.authorUrl,
-    licenseYear: context.licenseYear,
-    devPackageVersion: packageJson.version ?? "0.0.0",
-    oxfmtVersion: stripVersionRange(getDependencyVersion(packageJson, "oxfmt")),
-    oxlintVersion: stripVersionRange(getDependencyVersion(packageJson, "oxlint")),
+    authorName: author.name,
+    authorEmail: author.email,
+    authorUrl: author.url,
+    licenseYear: String(new Date().getFullYear()),
+    typescriptConfig: createTypeScriptConfigName(context.runtime),
+    oxlintNamedImports,
+    oxlintExtends,
   };
 }
 
@@ -401,7 +1097,7 @@ async function writePreCommitHook(targetDir: string, context: CreateContext): Pr
     'lint-staged.sh "pnpm run lint" "*.js" "*.jsx" "*.mjs" "*.cjs" "*.ts" "*.tsx" "*.mts" "*.cts"',
   ];
 
-  if (context.webComponents.includes("css")) {
+  if (hasCssComponent(context)) {
     lines.push(
       'lint-staged.sh "pnpm run lint:style" "*.css" "*.scss" "*.sass" "*.less" "*.pcss" "*.html" "*.vue" "*.svelte" "*.astro" "*.md" "*.mdx"',
     );
@@ -427,7 +1123,7 @@ async function writeVsCodeConfig(targetDir: string, context: CreateContext): Pro
   };
   const recommendations = ["editorconfig.editorconfig", "oxc.oxc-vscode"];
 
-  if (context.webComponents.includes("css")) {
+  if (hasCssComponent(context)) {
     settings["[html][css][scss][less]"] = {
       "editor.defaultFormatter": "oxc.oxc-vscode",
     };
@@ -458,6 +1154,25 @@ async function writeJson(filePath: string, value: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function runCommand(command: string, args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: "inherit",
+    });
+
+    child.on("error", reject);
+    child.on("exit", code => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`${command} ${args.join(" ")} exited with code ${code}.`));
+    });
+  });
+}
+
 function toPackageName(value: string): string {
   const normalizedValue = value
     .trim()
@@ -484,6 +1199,57 @@ function createDevPackageVersion(packageJson: PackageJson): string {
   return packageJson.version ? `^${packageJson.version}` : "latest";
 }
 
-function stripVersionRange(version: string): string {
-  return version.replace(/^[~^]/, "");
+function hasCssComponent(context: CreateContext): boolean {
+  return context.webComponents.includes("css");
+}
+
+function createStylelintConfig(context: CreateContext): string {
+  const configName = createStylelintConfigName(context.cssComponent);
+
+  return `import type { Config } from "stylelint";\n\nexport default {\n  extends: "@smallmains/dev/stylelint/${configName}.js",\n} satisfies Config;\n`;
+}
+
+function createStylelintConfigName(cssComponent: CssComponent): string {
+  if (cssComponent === "css-modules") {
+    return "css-modules";
+  }
+
+  if (cssComponent === "tailwind") {
+    return "tailwind";
+  }
+
+  return "generic";
+}
+
+function createOxlintParts(context: CreateContext): string[] {
+  return [
+    context.runtime === "nodejs" ? "nodejs" : "",
+    context.webComponents.includes("react") ? "react" : "",
+    context.webComponents.includes("security") ? "security" : "",
+    context.webComponents.includes("vitest") ? "vitest" : "",
+  ].filter(Boolean);
+}
+
+function createTypeScriptConfigName(runtime: Runtime): string {
+  if (runtime === "browser") {
+    return "browser";
+  }
+
+  if (runtime === "nodejs") {
+    return "nodejs";
+  }
+
+  return "generic";
+}
+
+function createNodeEngineVersion(version: string): string {
+  const normalizedVersion = version.trim();
+
+  return normalizedVersion.includes(".") ? normalizedVersion : `^${normalizedVersion}`;
+}
+
+function createDefaultNodeVersion(packageJson: PackageJson): string {
+  const configuredVersion = packageJson.engines?.node?.match(/\d+(?:\.\d+\.\d+)?/)?.[0];
+
+  return configuredVersion ?? "24";
 }

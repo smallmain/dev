@@ -5,14 +5,25 @@ import { fileURLToPath } from "node:url";
 export interface PackageJson {
   name?: string;
   version?: string;
-  author?: string | {
-    name?: string;
-    email?: string;
-    url?: string;
-  };
+  author?:
+    | string
+    | {
+        name?: string;
+        email?: string;
+        url?: string;
+      };
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  funding?:
+    | string
+    | {
+        type?: string;
+        url?: string;
+      };
+  engines?: {
+    node?: string;
+  };
   devEngines?: unknown;
 }
 
@@ -26,9 +37,10 @@ export async function readPackageJson(): Promise<PackageJson> {
 }
 
 export function getDependencyVersion(packageJson: PackageJson, name: string): string {
-  const version = packageJson.devDependencies?.[name]
-    ?? packageJson.peerDependencies?.[name]
-    ?? packageJson.dependencies?.[name];
+  const version =
+    packageJson.devDependencies?.[name] ??
+    packageJson.peerDependencies?.[name] ??
+    packageJson.dependencies?.[name];
 
   if (!version) {
     throw new Error(`Missing dependency version for ${name}.`);
@@ -37,7 +49,9 @@ export function getDependencyVersion(packageJson: PackageJson, name: string): st
   return version;
 }
 
-export function getAuthor(packageJson: PackageJson): Required<Exclude<PackageJson["author"], string | undefined>> {
+export function getAuthor(
+  packageJson: PackageJson,
+): Required<Exclude<PackageJson["author"], string | undefined>> {
   if (typeof packageJson.author === "string") {
     return {
       name: packageJson.author,
