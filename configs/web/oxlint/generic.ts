@@ -5,7 +5,7 @@ import { cssExtGlob } from "./shared.js";
 
 const base = defineConfig({
   plugins: ["eslint", "unicorn", "oxc", "import", "jsdoc", "promise", "typescript"],
-  jsPlugins: ["./plugins/comments.js"],
+  jsPlugins: ["./plugins/comments.js", "./plugins/consistent-esm-default-name.js"],
   options: {
     typeAware: true,
     reportUnusedDisableDirectives: "warn",
@@ -236,6 +236,9 @@ const base = defineConfig({
     "import/no-webpack-loader-syntax": "warn",
 
     "comments/require-description": "error",
+
+    "consistent-esm-default-name/default-import-name": "warn",
+    "consistent-esm-default-name/default-export-name": "warn",
 
     "jsdoc/check-access": "error",
     "jsdoc/check-tag-names": ["warn", { typed: true }],
