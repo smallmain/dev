@@ -85,7 +85,29 @@ npx sm create
 
 ### lint
 
-预留命令，暂未实现。
+```bash
+npx sm lint
+npx sm lint --fix
+npx sm lint src/index.ts
+```
+
+### staged-run
+
+```bash
+npx sm staged-run "pnpm run lint" "."
+```
+
+该命令会把匹配 Git 暂存区文件追加到指定命令后执行。
+
+### set-git-hook
+
+```bash
+npx sm set-git-hook
+```
+
+该命令会安装 Git Hooks：
+
+- `pre-commit`: 使用 `sm staged-run` 对暂存文件执行 lint。
 
 ## Editor Config
 
@@ -117,7 +139,6 @@ npm i -D @smallmains/dev
 | `@smallmains/dev/ts/base.json`    | 基础配置。                                    |
 | `@smallmains/dev/ts/generic.json` | 中立运行环境、使用 NodeNext 模块规范的配置。  |
 | `@smallmains/dev/ts/browser.json` | 浏览器运行环境、使用 Bundler 模块解析的配置。 |
-| `@smallmains/dev/ts/cocos3.json`  | Cocos Creator v3.x 项目配置。                 |
 | `@smallmains/dev/ts/nodejs.json`  | Node.js 项目配置。                            |
 
 ## VS Code Config

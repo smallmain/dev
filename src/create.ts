@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stdin, stdout } from "node:process";
 import { emitKeypressEvents } from "node:readline";
@@ -121,7 +121,7 @@ const webNpmPackageTemplateDir = path.join(packageRootDir, "templates/web/npm-pa
 
 const supportedStacks = new Set(["web"]);
 const supportedWebPresets = new Set(["npm-package"]);
-const supportedWebComponents = new Set(["css", "react", "security", "vitest"]);
+const supportedWebComponents = new Set(["css", "git-hook", "react", "security", "vitest"]);
 const supportedRuntimes = new Set<Runtime>(["neutral", "browser", "nodejs"]);
 const supportedCssComponents = new Set<CssComponent>(["native", "css-modules", "tailwind"]);
 const defaultDevEngines = {
@@ -139,6 +139,7 @@ export async function runCreateCommand(
   const context = await resolveCreateContext(options, packageJson);
   const targetDir = process.cwd();
 
+  await ensureGitRepository(targetDir);
   await renderTemplateDirectory(
     commonTemplateDir,
     targetDir,
@@ -158,7 +159,6 @@ export async function runCreateCommand(
     path.join(targetDir, "package.json"),
     createProjectPackageJson(context, packageJson),
   );
-  await writePreCommitHook(targetDir, context);
   await writeVsCodeConfig(targetDir, context);
 
   if (hasCssComponent(context)) {
@@ -195,7 +195,12 @@ async function resolveCreateContext(
     ...defaults,
     stacks: resolveOptionValues(options.stack, ["web"], supportedStacks, "stack"),
     webPreset: resolveOptionValue(options.preset, "npm-package", supportedWebPresets, "preset"),
-    webComponents: resolveOptionValues(options.component, ["vitest"], supportedWebComponents, "component"),
+    webComponents: resolveOptionValues(
+      options.component,
+      ["git-hook", "vitest"],
+      supportedWebComponents,
+      "component",
+    ),
   };
 
   if (yes || !stdin.isTTY || !stdout.isTTY) {
@@ -456,6 +461,7 @@ function createFormItems(context: CreateContext): FormItem[] {
       field: "webComponents",
       label: "Components",
       choices: [
+        { label: "Git Hook", value: "git-hook" },
         { label: "Vitest", value: "vitest" },
         { label: "CSS", value: "css" },
         { label: "React", value: "react" },
@@ -950,18 +956,12 @@ function renderChoice(choice: string, focused: boolean): string {
 function createProjectPackageJson(context: CreateContext, packageJson: PackageJson): unknown {
   const author = getAuthor(packageJson);
   const scripts: Record<string, string> = {
-    lint: "oxlint",
-    "lint:fix": "oxlint --fix",
-    prepare: "husky",
+    lint: "sm lint",
+    "lint:fix": "sm lint --fix",
   };
 
-  if (hasCssComponent(context)) {
-    scripts.lint = "oxlint && pnpm run lint:style";
-    scripts["lint:fix"] = "oxlint --fix && pnpm run lint:style:fix";
-    scripts["lint:style"] =
-      'stylelint "**/*.{css,scss,sass,less,pcss,html,vue,svelte,astro,md,mdx}"';
-    scripts["lint:style:fix"] =
-      'stylelint "**/*.{css,scss,sass,less,pcss,html,vue,svelte,astro,md,mdx}" --fix';
+  if (hasGitHookComponent(context)) {
+    scripts.prepare = "sm set-git-hook";
   }
 
   if (context.webComponents.includes("vitest")) {
@@ -970,8 +970,6 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
 
   const devDependencies: Record<string, string> = {
     "@smallmains/dev": createDevPackageVersion(packageJson),
-    husky: getDependencyVersion(packageJson, "husky"),
-    "lint-staged.sh": getDependencyVersion(packageJson, "lint-staged.sh"),
     oxfmt: getDependencyVersion(packageJson, "oxfmt"),
     oxlint: getDependencyVersion(packageJson, "oxlint"),
     "oxlint-tsgolint": getDependencyVersion(packageJson, "oxlint-tsgolint"),
@@ -1072,9 +1070,6 @@ async function renderTemplateDirectory(
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, content);
 
-    if (targetPath.endsWith(path.join(".husky", "pre-commit"))) {
-      await chmod(targetPath, 0o755);
-    }
   }
 }
 
@@ -1090,23 +1085,6 @@ function renderTemplate(content: string, values: TemplateValues): string {
 
 function resolveTemplateOutputName(name: string): string {
   return name.endsWith(".tmpl") ? name.slice(0, -".tmpl".length) : name;
-}
-
-async function writePreCommitHook(targetDir: string, context: CreateContext): Promise<void> {
-  const lines = [
-    'lint-staged.sh "pnpm run lint" "*.js" "*.jsx" "*.mjs" "*.cjs" "*.ts" "*.tsx" "*.mts" "*.cts"',
-  ];
-
-  if (hasCssComponent(context)) {
-    lines.push(
-      'lint-staged.sh "pnpm run lint:style" "*.css" "*.scss" "*.sass" "*.less" "*.pcss" "*.html" "*.vue" "*.svelte" "*.astro" "*.md" "*.mdx"',
-    );
-  }
-
-  const hookPath = path.join(targetDir, ".husky/pre-commit");
-  await mkdir(path.dirname(hookPath), { recursive: true });
-  await writeFile(hookPath, `${lines.join("\n")}\n`);
-  await chmod(hookPath, 0o755);
 }
 
 async function writeVsCodeConfig(targetDir: string, context: CreateContext): Promise<void> {
@@ -1149,6 +1127,19 @@ async function writeVsCodeConfig(targetDir: string, context: CreateContext): Pro
   await writeJson(path.join(vscodeDir, "extensions.json"), { recommendations });
 }
 
+async function ensureGitRepository(targetDir: string): Promise<void> {
+  if (await pathExists(path.join(targetDir, ".git"))) {
+    return;
+  }
+
+  if (await commandSucceeds("git", ["rev-parse", "--is-inside-work-tree"], targetDir)) {
+    return;
+  }
+
+  console.log("Initializing Git repository...");
+  await runCommand("git", ["init"], targetDir);
+}
+
 async function writeJson(filePath: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
@@ -1171,6 +1162,31 @@ function runCommand(command: string, args: string[], cwd: string): Promise<void>
       reject(new Error(`${command} ${args.join(" ")} exited with code ${code}.`));
     });
   });
+}
+
+function commandSucceeds(command: string, args: string[], cwd: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: "ignore",
+    });
+
+    child.on("error", () => resolve(false));
+    child.on("exit", code => resolve(code === 0));
+  });
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
 function toPackageName(value: string): string {
@@ -1201,6 +1217,10 @@ function createDevPackageVersion(packageJson: PackageJson): string {
 
 function hasCssComponent(context: CreateContext): boolean {
   return context.webComponents.includes("css");
+}
+
+function hasGitHookComponent(context: CreateContext): boolean {
+  return context.webComponents.includes("git-hook");
 }
 
 function createStylelintConfig(context: CreateContext): string {

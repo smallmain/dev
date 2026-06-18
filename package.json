@@ -65,8 +65,6 @@
   },
   "devDependencies": {
     "@types/node": "^24",
-    "husky": "^9.1.7",
-    "lint-staged.sh": "^0.6.9",
     "oxfmt": "^0.55.0",
     "oxlint": "^1.70.0",
     "oxlint-tsgolint": "^0.23.0",

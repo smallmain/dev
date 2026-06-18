@@ -262,12 +262,6 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.13.2
-      husky:
-        specifier: ^9.1.7
-        version: 9.1.7
-      lint-staged.sh:
-        specifier: ^0.6.9
-        version: 0.6.9
       oxfmt:
         specifier: ^0.55.0
         version: 0.55.0
@@ -1328,11 +1322,6 @@ packages:
   htmlparser2@8.0.2:
     resolution: {integrity: sha512-GYdjWKDkbRLkZ5geuHs5NY1puJ+PXwP7+fHPRz06Eirsb9ugf6d8kkXav6ADhcODhFFPMIXyxkxSuMf3D6NCFA==}
 
-  husky@9.1.7:
-    resolution: {integrity: sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA==}
-    engines: {node: '>=18'}
-    hasBin: true
-
   ignore@7.0.5:
     resolution: {integrity: sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==}
     engines: {node: '>= 4'}
@@ -1491,10 +1480,6 @@ packages:
 
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
-
-  lint-staged.sh@0.6.9:
-    resolution: {integrity: sha512-tMRUX+4/vKPAtERwD4i1O9aRSamE0ZZZU54+O7poKDin0m0X27PHlPROaCwx2jNKsDnJBxiVVThxV/UzhPvLXg==}
-    hasBin: true
 
   lodash.truncate@4.4.2:
     resolution: {integrity: sha512-jttmRe7bRse52OsWIMDLaXxWqRAmtIUccAQ3garviCqJjafXOfNMO0yMfNpdD6zbGaTU0P5Nz7e7gAT6cKmJRw==}
@@ -2702,8 +2687,6 @@ snapshots:
       domutils: 3.2.2
       entities: 4.5.0
 
-  husky@9.1.7: {}
-
   ignore@7.0.5: {}
 
   import-fresh@3.3.1:
@@ -2816,8 +2799,6 @@ snapshots:
       lightningcss-win32-x64-msvc: 1.32.0
 
   lines-and-columns@1.2.4: {}
-
-  lint-staged.sh@0.6.9: {}
 
   lodash.truncate@4.4.2: {}
 

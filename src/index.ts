@@ -1,6 +1,9 @@
 import { Command } from "commander";
 import { runCreateCommand } from "./create.ts";
+import { runSetGitHookCommand } from "./git-hook.ts";
+import { runLintCommand } from "./lint.ts";
 import { readPackageJson } from "./package-info.ts";
+import { runStagedRunCommand } from "./staged-run.ts";
 
 function collectOption(value: string, previousValues: string[]): string[] {
   return [...previousValues, value];
@@ -37,18 +40,31 @@ async function main(): Promise<void> {
     .option("--preset <preset>", "Preset. Currently supports npm-package.")
     .option(
       "--component <component>",
-      "Component. Supports vitest, css, react, security. Repeat or use commas for multiple values.",
+      "Component. Supports git-hook, vitest, css, react, security. Repeat or use commas for multiple values.",
       collectOption,
       [],
     )
     .action(options => runCreateCommand(options, packageJson));
 
   program
-    .command("lint")
-    .description("Reserved command; not implemented yet.")
-    .action(() => {
-      console.log("sm lint is reserved and not implemented yet.");
-    });
+    .command("lint [files...]")
+    .description("Run project lint tools.")
+    .option("--fix", "Automatically fix problems.")
+    .action((files: string[], options: { fix?: boolean }) => runLintCommand(files, options));
+
+  program
+    .command("staged-run [command] [globs...]")
+    .description("Run a command against staged files matched by Git pathspecs.")
+    .option("--update-index", "Run git update-index --again after the command succeeds.")
+    .action((command: string | undefined, globs: string[], options: { updateIndex?: boolean }) =>
+      runStagedRunCommand(command, globs, options),
+    );
+
+  program
+    .command("set-git-hook")
+    .description("Install the sm pre-commit Git hook.")
+    .option("--force", "Overwrite an existing non-sm pre-commit hook.")
+    .action((options: { force?: boolean }) => runSetGitHookCommand(options));
 
   await program.parseAsync();
 }
