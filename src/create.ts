@@ -127,7 +127,7 @@ const supportedCssComponents = new Set<CssComponent>(["native", "css-modules", "
 const defaultDevEngines = {
   packageManager: {
     name: "pnpm",
-    version: "^11.5.3",
+    version: "11.8.0",
     onFail: "download",
   },
 };
