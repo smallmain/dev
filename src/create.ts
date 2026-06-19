@@ -23,6 +23,7 @@ interface RawCreateOptions {
   css?: string;
   stack?: string[];
   preset?: string;
+  packageManager?: string;
   component?: string[];
 }
 
@@ -39,6 +40,7 @@ interface CreateContext {
   cssComponent: CssComponent;
   stacks: string[];
   webPreset: string;
+  packageManager: PackageManager;
   webComponents: string[];
 }
 
@@ -53,11 +55,13 @@ interface CreateDefaults {
   runtime: Runtime;
   nodeVersion: string;
   cssComponent: CssComponent;
+  packageManager: PackageManager;
 }
 
 type TemplateValues = Record<string, string>;
 type Runtime = "neutral" | "browser" | "nodejs";
 type CssComponent = "native" | "css-modules" | "tailwind";
+type PackageManager = "npm" | "pnpm";
 
 type FormField =
   | "packageName"
@@ -71,10 +75,11 @@ type FormField =
   | "cssComponent"
   | "stacks"
   | "webPreset"
+  | "packageManager"
   | "webComponents";
 type TextFormField = Exclude<
   FormField,
-  "runtime" | "cssComponent" | "stacks" | "webPreset" | "webComponents"
+  "runtime" | "cssComponent" | "stacks" | "webPreset" | "packageManager" | "webComponents"
 >;
 
 interface TextFormItem {
@@ -92,7 +97,7 @@ interface ToggleFormItem {
 
 interface SelectFormItem {
   kind: "select";
-  field: "runtime" | "cssComponent" | "webPreset";
+  field: "runtime" | "cssComponent" | "webPreset" | "packageManager";
   label: string;
   choices: { label: string; value: string }[];
 }
@@ -124,13 +129,23 @@ const supportedWebPresets = new Set(["npm-package"]);
 const supportedWebComponents = new Set(["css", "git-hook", "react", "security", "vitest"]);
 const supportedRuntimes = new Set<Runtime>(["neutral", "browser", "nodejs"]);
 const supportedCssComponents = new Set<CssComponent>(["native", "css-modules", "tailwind"]);
-const defaultDevEngines = {
-  packageManager: {
-    name: "pnpm",
-    version: "11.8.0",
-    onFail: "download",
+const supportedPackageManagers = new Set<PackageManager>(["npm", "pnpm"]);
+const defaultDevEnginesByPackageManager = {
+  npm: {
+    packageManager: {
+      name: "npm",
+      version: "11",
+      onFail: "download",
+    },
   },
-};
+  pnpm: {
+    packageManager: {
+      name: "pnpm",
+      version: "11.8.0",
+      onFail: "download",
+    },
+  },
+} satisfies Record<PackageManager, unknown>;
 
 export async function runCreateCommand(
   options: RawCreateOptions,
@@ -165,8 +180,8 @@ export async function runCreateCommand(
     await writeFile(path.join(targetDir, "stylelint.config.ts"), createStylelintConfig(context));
   }
 
-  console.log("Installing dependencies with pnpm...");
-  await runCommand("pnpm", ["install"], targetDir);
+  console.log(`Installing dependencies with ${context.packageManager}...`);
+  await runCommand(context.packageManager, ["install"], targetDir);
 
   console.log(`Created ${context.packageName} in ${targetDir}`);
 }
@@ -190,6 +205,7 @@ async function resolveCreateContext(
     runtime: resolveRuntime(options.runtime),
     nodeVersion: options.nodeVersion ?? createDefaultNodeVersion(packageJson),
     cssComponent: resolveCssComponent(options.css),
+    packageManager: resolvePackageManager(options.packageManager),
   };
   const defaultContext: CreateContext = {
     ...defaults,
@@ -274,6 +290,13 @@ function resolveCssComponent(value: string | undefined): CssComponent {
   return cssComponent as CssComponent;
 }
 
+function resolvePackageManager(value: string | undefined): PackageManager {
+  const packageManager = value ?? "pnpm";
+
+  validateOptions([packageManager], supportedPackageManagers, "package manager");
+  return packageManager as PackageManager;
+}
+
 function validateOptions(values: string[], supportedValues: Set<string>, label: string): void {
   const unsupportedValues = values.filter(value => !supportedValues.has(value));
 
@@ -302,6 +325,7 @@ function validateCreateContext(context: CreateContext): void {
   validateOptions(context.webComponents, supportedWebComponents, "component");
   validateOptions([context.runtime], supportedRuntimes, "runtime");
   validateOptions([context.cssComponent], supportedCssComponents, "css component");
+  validateOptions([context.packageManager], supportedPackageManagers, "package manager");
 
   if (!context.stacks.includes("web")) {
     throw new Error("At least one supported stack is required. Currently only web is supported.");
@@ -441,6 +465,15 @@ function createFormItems(context: CreateContext): FormItem[] {
     },
     {
       kind: "select",
+      field: "packageManager",
+      label: "Package Manager",
+      choices: [
+        { label: "pnpm", value: "pnpm" },
+        { label: "npm", value: "npm" },
+      ],
+    },
+    {
+      kind: "select",
       field: "runtime",
       label: "Runtime",
       choices: [
@@ -455,20 +488,18 @@ function createFormItems(context: CreateContext): FormItem[] {
     items.push({ kind: "text", field: "nodeVersion", label: "Node version" });
   }
 
-  items.push(
-    {
-      kind: "toggle",
-      field: "webComponents",
-      label: "Components",
-      choices: [
-        { label: "Git Hook", value: "git-hook" },
-        { label: "Vitest", value: "vitest" },
-        { label: "CSS", value: "css" },
-        { label: "React", value: "react" },
-        { label: "Security", value: "security" },
-      ],
-    },
-  );
+  items.push({
+    kind: "toggle",
+    field: "webComponents",
+    label: "Components",
+    choices: [
+      { label: "Git Hook", value: "git-hook" },
+      { label: "Vitest", value: "vitest" },
+      { label: "CSS", value: "css" },
+      { label: "React", value: "react" },
+      { label: "Security", value: "security" },
+    ],
+  });
 
   if (hasCssComponent(context)) {
     items.push({
@@ -486,11 +517,7 @@ function createFormItems(context: CreateContext): FormItem[] {
   return items;
 }
 
-function renderCreateForm(
-  context: CreateContext,
-  items: FormItem[],
-  state: FormState,
-): void {
+function renderCreateForm(context: CreateContext, items: FormItem[], state: FormState): void {
   const lines = [
     "\x1B[2J\x1B[H",
     "Create Package",
@@ -667,11 +694,7 @@ function moveTextCursorTo(
   state.textCursors[field] = clamp(cursor, 0, getTextChars(context[field]).length);
 }
 
-function moveTextCursorToEnd(
-  context: CreateContext,
-  field: TextFormField,
-  state: FormState,
-): void {
+function moveTextCursorToEnd(context: CreateContext, field: TextFormField, state: FormState): void {
   moveTextCursorTo(context, field, state, getTextChars(context[field]).length);
 }
 
@@ -733,11 +756,7 @@ function deleteTextBeforeCursorTo(
   updateDerivedTextFields(context, field);
 }
 
-function deleteTextAtCursor(
-  context: CreateContext,
-  field: TextFormField,
-  state: FormState,
-): void {
+function deleteTextAtCursor(context: CreateContext, field: TextFormField, state: FormState): void {
   const chars = getTextChars(context[field]);
   const cursor = getTextCursor(context, field, state);
 
@@ -926,14 +945,15 @@ function moveChoiceCursor(
     return;
   }
 
+  if (item.field === "packageManager") {
+    context.packageManager = resolvePackageManager(nextValue);
+    return;
+  }
+
   context.webPreset = nextValue;
 }
 
-function getChoiceCursor(
-  context: CreateContext,
-  item: ChoiceFormItem,
-  state: FormState,
-): number {
+function getChoiceCursor(context: CreateContext, item: ChoiceFormItem, state: FormState): number {
   const savedIndex = state.choiceCursors[item.field];
 
   if (savedIndex !== undefined && savedIndex >= 0 && savedIndex < item.choices.length) {
@@ -1008,7 +1028,7 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
     },
     scripts,
     devDependencies,
-    devEngines: packageJson.devEngines ?? defaultDevEngines,
+    devEngines: createDevEngines(context.packageManager, packageJson),
   };
 
   if (context.runtime === "nodejs") {
@@ -1038,6 +1058,7 @@ function createTemplateValues(context: CreateContext, packageJson: PackageJson):
     authorEmail: author.email,
     authorUrl: author.url,
     licenseYear: String(new Date().getFullYear()),
+    packageManager: context.packageManager,
     typescriptConfig: createTypeScriptConfigName(context.runtime),
     oxlintNamedImports,
     oxlintExtends,
@@ -1069,7 +1090,6 @@ async function renderTemplateDirectory(
     const content = renderTemplate(await readFile(sourcePath, "utf8"), values);
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, content);
-
   }
 }
 
@@ -1213,6 +1233,36 @@ function toDisplayName(packageName: string): string {
 
 function createDevPackageVersion(packageJson: PackageJson): string {
   return packageJson.version ? `^${packageJson.version}` : "latest";
+}
+
+function createDevEngines(packageManager: PackageManager, packageJson: PackageJson): unknown {
+  if (hasPackageManagerDevEngine(packageJson.devEngines, packageManager)) {
+    return packageJson.devEngines;
+  }
+
+  return defaultDevEnginesByPackageManager[packageManager];
+}
+
+function hasPackageManagerDevEngine(devEngines: unknown, packageManager: PackageManager): boolean {
+  if (!isRecord(devEngines)) {
+    return false;
+  }
+
+  const packageManagerDevEngine = devEngines.packageManager;
+
+  if (Array.isArray(packageManagerDevEngine)) {
+    return packageManagerDevEngine.some(value => isPackageManagerDevEngine(value, packageManager));
+  }
+
+  return isPackageManagerDevEngine(packageManagerDevEngine, packageManager);
+}
+
+function isPackageManagerDevEngine(value: unknown, packageManager: PackageManager): boolean {
+  return isRecord(value) && value.name === packageManager;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function hasCssComponent(context: CreateContext): boolean {

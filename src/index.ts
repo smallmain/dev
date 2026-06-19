@@ -38,6 +38,7 @@ async function main(): Promise<void> {
       [],
     )
     .option("--preset <preset>", "Preset. Currently supports npm-package.")
+    .option("--package-manager <package-manager>", "Package manager. Supports npm, pnpm.")
     .option(
       "--component <component>",
       "Component. Supports git-hook, vitest, css, react, security. Repeat or use commas for multiple values.",

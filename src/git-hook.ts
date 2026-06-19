@@ -8,11 +8,6 @@ interface RawSetGitHookOptions {
 
 const managedPreCommitMarker = "# sm managed pre-commit hook";
 const managedCommitMessageMarker = "# sm managed commit-msg hook";
-const preCommitHookContent = `#!/bin/sh
-${managedPreCommitMarker}
-PATH="$(git rev-parse --show-toplevel)/node_modules/.bin:$PATH"
-sm staged-run "pnpm run lint" "."
-`;
 const commitMessageHookContent = `#!/bin/sh
 ${managedCommitMessageMarker}
 PATH="$(git rev-parse --show-toplevel)/node_modules/.bin:$PATH"
@@ -38,8 +33,10 @@ export async function runSetGitHookCommand(options: RawSetGitHookOptions): Promi
     throw new Error("Git core.hooksPath is set. Re-run with --force to use .git/hooks.");
   }
 
+  const packageManager = await resolvePackageManager();
+
   await writeManagedHook({
-    content: preCommitHookContent,
+    content: createPreCommitHookContent(packageManager),
     force: options.force === true,
     gitDir,
     marker: managedPreCommitMarker,
@@ -67,7 +64,11 @@ async function writeManagedHook(options: {
   const hookPath = path.join(options.gitDir, "hooks", options.name);
   const existingContent = await readOptionalFile(hookPath);
 
-  if (existingContent !== undefined && !existingContent.includes(options.marker) && !options.force) {
+  if (
+    existingContent !== undefined &&
+    !existingContent.includes(options.marker) &&
+    !options.force
+  ) {
     throw new Error(
       `Existing ${options.name} hook is not managed by sm. Re-run with --force to overwrite it.`,
     );
@@ -105,7 +106,9 @@ async function getGitDir(): Promise<string | undefined> {
 
 async function getHooksPath(): Promise<string | undefined> {
   try {
-    const hooksPath = (await readCommandOutput("git", ["config", "--get", "core.hooksPath"])).trim();
+    const hooksPath = (
+      await readCommandOutput("git", ["config", "--get", "core.hooksPath"])
+    ).trim();
 
     return hooksPath.length > 0 ? hooksPath : undefined;
   } catch {
@@ -117,6 +120,55 @@ async function resetHooksPath(hooksPath: string | undefined, force: boolean): Pr
   if (hooksPath && (isHuskyHooksPath(hooksPath) || force)) {
     await runCommand("git", ["config", "--unset", "core.hooksPath"], { stdio: "ignore" });
   }
+}
+
+async function resolvePackageManager(): Promise<"npm" | "pnpm"> {
+  const packageJson = await readOptionalPackageJson(path.join(process.cwd(), "package.json"));
+  const packageManager = getDevEnginePackageManagerName(packageJson?.devEngines);
+
+  return packageManager === "npm" ? "npm" : "pnpm";
+}
+
+function createPreCommitHookContent(packageManager: "npm" | "pnpm"): string {
+  return `#!/bin/sh
+${managedPreCommitMarker}
+PATH="$(git rev-parse --show-toplevel)/node_modules/.bin:$PATH"
+sm staged-run "${packageManager} run lint" "."
+`;
+}
+
+async function readOptionalPackageJson(
+  filePath: string,
+): Promise<{ devEngines?: unknown } | undefined> {
+  const content = await readOptionalFile(filePath);
+
+  if (content === undefined) {
+    return undefined;
+  }
+
+  return JSON.parse(content) as { devEngines?: unknown };
+}
+
+function getDevEnginePackageManagerName(devEngines: unknown): string | undefined {
+  if (!isRecord(devEngines)) {
+    return undefined;
+  }
+
+  const packageManagerDevEngine = devEngines.packageManager;
+
+  if (Array.isArray(packageManagerDevEngine)) {
+    return packageManagerDevEngine.map(getPackageManagerName).find(Boolean);
+  }
+
+  return getPackageManagerName(packageManagerDevEngine);
+}
+
+function getPackageManagerName(value: unknown): string | undefined {
+  return isRecord(value) && typeof value.name === "string" ? value.name : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isHuskyHooksPath(hooksPath: string): boolean {

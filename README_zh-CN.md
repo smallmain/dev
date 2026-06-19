@@ -96,7 +96,7 @@ npx sm lint --commit-message .git/COMMIT_EDITMSG --file
 ### staged-run
 
 ```bash
-npx sm staged-run "pnpm run lint" "."
+npx sm staged-run "npm run lint" "."
 ```
 
 该命令会把匹配 Git 暂存区文件追加到指定命令后执行。
