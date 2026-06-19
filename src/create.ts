@@ -1141,6 +1141,10 @@ async function writeVsCodeConfig(targetDir: string, context: CreateContext): Pro
     recommendations.push("stylelint.vscode-stylelint");
   }
 
+  if (context.webComponents.includes("vitest")) {
+    recommendations.push("vitest.explorer");
+  }
+
   const vscodeDir = path.join(targetDir, ".vscode");
   await mkdir(vscodeDir, { recursive: true });
   await writeJson(path.join(vscodeDir, "settings.json"), settings);
