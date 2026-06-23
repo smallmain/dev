@@ -1013,9 +1013,6 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
       url: `git+https://github.com/${context.githubOwner}/${context.githubRepo}.git`,
     },
     funding: packageJson.funding,
-    publishConfig: {
-      access: "public",
-    },
     scripts,
     devDependencies,
     devEngines: createDevEngines(context.packageManager, packageJson),

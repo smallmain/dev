@@ -35,9 +35,6 @@
   "type": "module",
   "main": "index.js",
   "types": "./types/index.d.ts",
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "dev": "node scripts/dev.js",
     "dev:prod": "node scripts/dev-prod.js",
