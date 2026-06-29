@@ -34,17 +34,11 @@ async function main(): Promise<void> {
       "--css <css>",
       "CSS mode when component css is enabled. Supports native, css-modules, tailwind.",
     )
-    .option(
-      "--stack <stack>",
-      "Tech stack. Repeat or use commas for multiple values.",
-      collectOption,
-      [],
-    )
     .option("--preset <preset>", "Preset. Currently supports npm-package.")
     .option("--package-manager <package-manager>", "Package manager. Supports npm, pnpm.")
     .option(
       "--component <component>",
-      "Component. Supports git-hook, vitest, css, react, security. Repeat or use commas for multiple values.",
+      "Optional component. Supports git-hook, css, react, security. Repeat or use commas for multiple values.",
       collectOption,
       [],
     )

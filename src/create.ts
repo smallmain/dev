@@ -21,7 +21,6 @@ interface RawCreateOptions {
   runtime?: string;
   nodeVersion?: string;
   css?: string;
-  stack?: string[];
   preset?: string;
   packageManager?: string;
   component?: string[];
@@ -35,13 +34,12 @@ interface CreateContext {
   zhDescription: string;
   githubOwner: string;
   githubRepo: string;
+  preset: Preset;
   runtime: Runtime;
   nodeVersion: string;
   cssComponent: CssComponent;
-  stacks: string[];
-  webPreset: string;
   packageManager: PackageManager;
-  webComponents: string[];
+  components: Component[];
 }
 
 interface CreateDefaults {
@@ -52,6 +50,7 @@ interface CreateDefaults {
   zhDescription: string;
   githubOwner: string;
   githubRepo: string;
+  preset: Preset;
   runtime: Runtime;
   nodeVersion: string;
   cssComponent: CssComponent;
@@ -59,11 +58,14 @@ interface CreateDefaults {
 }
 
 type TemplateValues = Record<string, string>;
+type Preset = "npm-package";
 type Runtime = "neutral" | "browser" | "nodejs";
 type CssComponent = "native" | "css-modules" | "tailwind";
 type PackageManager = "npm" | "pnpm";
+type Component = "git-hook" | "react" | "css" | "security";
 
 type FormField =
+  | "preset"
   | "packageName"
   | "description"
   | "zhName"
@@ -73,13 +75,11 @@ type FormField =
   | "nodeVersion"
   | "runtime"
   | "cssComponent"
-  | "stacks"
-  | "webPreset"
   | "packageManager"
-  | "webComponents";
+  | "components";
 type TextFormField = Exclude<
   FormField,
-  "runtime" | "cssComponent" | "stacks" | "webPreset" | "packageManager" | "webComponents"
+  "preset" | "runtime" | "cssComponent" | "packageManager" | "components"
 >;
 
 interface TextFormItem {
@@ -90,14 +90,14 @@ interface TextFormItem {
 
 interface ToggleFormItem {
   kind: "toggle";
-  field: "stacks" | "webComponents";
+  field: "components";
   label: string;
-  choices: { label: string; value: string }[];
+  choices: { label: string; value: Component }[];
 }
 
 interface SelectFormItem {
   kind: "select";
-  field: "runtime" | "cssComponent" | "webPreset" | "packageManager";
+  field: "preset" | "runtime" | "cssComponent" | "packageManager";
   label: string;
   choices: { label: string; value: string }[];
 }
@@ -125,9 +125,8 @@ const commonConfigDir = path.join(packageRootDir, "configs/common");
 const webNpmPackageTemplateDir = path.join(packageRootDir, "templates/web/npm-package");
 const webNpmPackageCssTemplateDir = path.join(packageRootDir, "templates/web/npm-package-css");
 
-const supportedStacks = new Set(["web"]);
-const supportedWebPresets = new Set(["npm-package"]);
-const supportedWebComponents = new Set(["css", "git-hook", "react", "security", "vitest"]);
+const supportedPresets = new Set<Preset>(["npm-package"]);
+const supportedComponents = new Set<Component>(["git-hook", "react", "css", "security"]);
 const supportedRuntimes = new Set<Runtime>(["neutral", "browser", "nodejs"]);
 const supportedCssComponents = new Set<CssComponent>(["native", "css-modules", "tailwind"]);
 const supportedPackageManagers = new Set<PackageManager>(["npm", "pnpm"]);
@@ -192,6 +191,7 @@ async function resolveCreateContext(
     zhDescription: options.zhDescription ?? "描述。",
     githubOwner: options.githubOwner ?? "smallmain",
     githubRepo: options.githubRepo ?? toRepoName(packageName),
+    preset: resolvePreset(options.preset),
     runtime: resolveRuntime(options.runtime),
     nodeVersion: options.nodeVersion ?? createDefaultNodeVersion(packageJson),
     cssComponent: resolveCssComponent(options.css),
@@ -199,12 +199,10 @@ async function resolveCreateContext(
   };
   const defaultContext: CreateContext = {
     ...defaults,
-    stacks: resolveOptionValues(options.stack, ["web"], supportedStacks, "stack"),
-    webPreset: resolveOptionValue(options.preset, "npm-package", supportedWebPresets, "preset"),
-    webComponents: resolveOptionValues(
+    components: resolveOptionValues(
       options.component,
-      ["git-hook", "vitest"],
-      supportedWebComponents,
+      ["git-hook"],
+      supportedComponents,
       "component",
     ),
   };
@@ -234,12 +232,12 @@ function normalizeOptions(values: string[] | undefined): string[] {
   ];
 }
 
-function resolveOptionValues(
+function resolveOptionValues<T extends string>(
   values: string[] | undefined,
-  defaultValues: string[],
-  supportedValues: Set<string>,
+  defaultValues: T[],
+  supportedValues: Set<T>,
   label: string,
-): string[] {
+): T[] {
   const resolvedValues = normalizeOptions(values);
 
   if (resolvedValues.length === 0) {
@@ -247,21 +245,25 @@ function resolveOptionValues(
   }
 
   validateOptions(resolvedValues, supportedValues, label);
-  return resolvedValues;
+  return resolvedValues as T[];
 }
 
-function resolveOptionValue(
+function resolveOptionValue<T extends string>(
   value: string | undefined,
-  defaultValue: string,
-  supportedValues: Set<string>,
+  defaultValue: T,
+  supportedValues: Set<T>,
   label: string,
-): string {
+): T {
   if (!value) {
     return defaultValue;
   }
 
   validateOptions([value], supportedValues, label);
-  return value;
+  return value as T;
+}
+
+function resolvePreset(value: string | undefined): Preset {
+  return resolveOptionValue(value, "npm-package", supportedPresets, "preset");
 }
 
 function resolveRuntime(value: string | undefined): Runtime {
@@ -287,8 +289,12 @@ function resolvePackageManager(value: string | undefined): PackageManager {
   return packageManager as PackageManager;
 }
 
-function validateOptions(values: string[], supportedValues: Set<string>, label: string): void {
-  const unsupportedValues = values.filter(value => !supportedValues.has(value));
+function validateOptions<T extends string>(
+  values: string[],
+  supportedValues: Set<T>,
+  label: string,
+): void {
+  const unsupportedValues = values.filter(value => !supportedValues.has(value as T));
 
   if (unsupportedValues.length > 0) {
     throw new Error(`Unsupported ${label}: ${unsupportedValues.join(", ")}.`);
@@ -310,16 +316,11 @@ function validateCreateContext(context: CreateContext): void {
     throw new Error(`${missingField[0]} is required.`);
   }
 
-  validateOptions(context.stacks, supportedStacks, "stack");
-  validateOptions([context.webPreset], supportedWebPresets, "preset");
-  validateOptions(context.webComponents, supportedWebComponents, "component");
+  validateOptions([context.preset], supportedPresets, "preset");
+  validateOptions(context.components, supportedComponents, "component");
   validateOptions([context.runtime], supportedRuntimes, "runtime");
   validateOptions([context.cssComponent], supportedCssComponents, "css component");
   validateOptions([context.packageManager], supportedPackageManagers, "package manager");
-
-  if (!context.stacks.includes("web")) {
-    throw new Error("At least one supported stack is required. Currently only web is supported.");
-  }
 
   if (context.runtime === "nodejs") {
     validateNodeVersion(context.nodeVersion);
@@ -327,8 +328,8 @@ function validateCreateContext(context: CreateContext): void {
 }
 
 function validateNodeVersion(version: string): void {
-  if (!/^(?:\d+|\d+\.\d+\.\d+)$/.test(version.trim())) {
-    throw new Error("Node version must be like 22 or 22.1.1.");
+  if (!/^\^?(?:\d+|\d+\.\d+\.\d+)$/.test(version.trim())) {
+    throw new Error("Node version must be like 24, 24.1.1, ^24, or ^24.1.1.");
   }
 }
 
@@ -435,24 +436,18 @@ async function runCreateForm(initialContext: CreateContext): Promise<CreateConte
 
 function createFormItems(context: CreateContext): FormItem[] {
   const items: FormItem[] = [
+    {
+      kind: "select",
+      field: "preset",
+      label: "Preset",
+      choices: [{ label: "Npm Package", value: "npm-package" }],
+    },
     { kind: "text", field: "packageName", label: "Package Name" },
     { kind: "text", field: "description", label: "Package Description" },
     { kind: "text", field: "zhName", label: "Chinese Name" },
     { kind: "text", field: "zhDescription", label: "Chinese Description" },
     { kind: "text", field: "githubOwner", label: "GitHub Owner" },
     { kind: "text", field: "githubRepo", label: "GitHub Repo" },
-    {
-      kind: "toggle",
-      field: "stacks",
-      label: "Stack",
-      choices: [{ label: "Web", value: "web" }],
-    },
-    {
-      kind: "select",
-      field: "webPreset",
-      label: "Preset",
-      choices: [{ label: "Package", value: "npm-package" }],
-    },
     {
       kind: "select",
       field: "packageManager",
@@ -480,11 +475,10 @@ function createFormItems(context: CreateContext): FormItem[] {
 
   items.push({
     kind: "toggle",
-    field: "webComponents",
+    field: "components",
     label: "Components",
     choices: [
       { label: "Git Hook", value: "git-hook" },
-      { label: "Vitest", value: "vitest" },
       { label: "CSS", value: "css" },
       { label: "React", value: "react" },
       { label: "Security", value: "security" },
@@ -886,7 +880,7 @@ function clamp(value: number, min: number, max: number): number {
 function toggleFormValue(
   context: CreateContext,
   field: ToggleFormItem["field"],
-  value: string,
+  value: Component,
 ): void {
   const values = context[field];
 
@@ -925,6 +919,11 @@ function moveChoiceCursor(
 
   const nextValue = item.choices[nextIndex]?.value ?? item.choices[0]?.value ?? context[item.field];
 
+  if (item.field === "preset") {
+    context.preset = resolvePreset(nextValue);
+    return;
+  }
+
   if (item.field === "runtime") {
     context.runtime = resolveRuntime(nextValue);
     return;
@@ -937,10 +936,7 @@ function moveChoiceCursor(
 
   if (item.field === "packageManager") {
     context.packageManager = resolvePackageManager(nextValue);
-    return;
   }
-
-  context.webPreset = nextValue;
 }
 
 function getChoiceCursor(context: CreateContext, item: ChoiceFormItem, state: FormState): number {
@@ -974,9 +970,7 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
     scripts.prepare = "sm set-git-hook";
   }
 
-  if (context.webComponents.includes("vitest")) {
-    scripts.test = "vitest";
-  }
+  scripts.test = "vitest";
 
   const devDependencies: Record<string, string> = {
     "@smallmains/dev": createDevPackageVersion(packageJson),
@@ -990,9 +984,7 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
     devDependencies.stylelint = getDependencyVersion(packageJson, "stylelint");
   }
 
-  if (context.webComponents.includes("vitest")) {
-    devDependencies.vitest = getDependencyVersion(packageJson, "vitest");
-  }
+  devDependencies.vitest = getDependencyVersion(packageJson, "vitest");
 
   if (context.runtime === "nodejs") {
     devDependencies["@types/node"] = getDependencyVersion(packageJson, "@types/node");
@@ -1129,9 +1121,7 @@ async function writeVsCodeConfig(targetDir: string, context: CreateContext): Pro
     recommendations.push("stylelint.vscode-stylelint");
   }
 
-  if (context.webComponents.includes("vitest")) {
-    recommendations.push("vitest.explorer");
-  }
+  recommendations.push("vitest.explorer");
 
   const vscodeDir = path.join(targetDir, ".vscode");
   await mkdir(vscodeDir, { recursive: true });
@@ -1227,11 +1217,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function hasCssComponent(context: CreateContext): boolean {
-  return context.webComponents.includes("css");
+  return context.components.includes("css");
 }
 
 function hasGitHookComponent(context: CreateContext): boolean {
-  return context.webComponents.includes("git-hook");
+  return context.components.includes("git-hook");
 }
 
 function createStylelintConfigName(cssComponent: CssComponent): string {
@@ -1249,9 +1239,9 @@ function createStylelintConfigName(cssComponent: CssComponent): string {
 function createOxlintParts(context: CreateContext): string[] {
   return [
     context.runtime === "nodejs" ? "nodejs" : "",
-    context.webComponents.includes("react") ? "react" : "",
-    context.webComponents.includes("security") ? "security" : "",
-    context.webComponents.includes("vitest") ? "vitest" : "",
+    context.components.includes("react") ? "react" : "",
+    context.components.includes("security") ? "security" : "",
+    "vitest",
   ].filter(Boolean);
 }
 
@@ -1270,11 +1260,15 @@ function createTypeScriptConfigName(runtime: Runtime): string {
 function createNodeEngineVersion(version: string): string {
   const normalizedVersion = version.trim();
 
-  return normalizedVersion.includes(".") ? normalizedVersion : `^${normalizedVersion}`;
+  if (normalizedVersion.startsWith("^")) {
+    return normalizedVersion;
+  }
+
+  return `^${normalizedVersion}`;
 }
 
 function createDefaultNodeVersion(packageJson: PackageJson): string {
-  const configuredVersion = packageJson.engines?.node?.match(/\d+(?:\.\d+\.\d+)?/)?.[0];
+  const configuredVersion = packageJson.engines?.node?.match(/\^?\d+(?:\.\d+\.\d+)?/)?.[0];
 
-  return configuredVersion ?? "24";
+  return configuredVersion ? createNodeEngineVersion(configuredVersion) : "^24";
 }

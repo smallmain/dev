@@ -78,9 +78,9 @@ npm i -D @smallmains/dev
 ### create
 
 ```bash
-npx sm create                 # Interactive interface
-npx sm create --yes           # Create directly, skipping the interactive interface
-npx sm create --stack web     # Control defaults through arguments; use `-h` to view all arguments
+npx sm create                   # Interactive interface
+npx sm create --yes             # Create directly, skipping the interactive interface
+npx sm create --component react # Control defaults through arguments; use `-h` to view all arguments
 ```
 
 This command quickly creates a project from a preset template.
@@ -159,7 +159,7 @@ Example:
 
 ## VS Code Config
 
-The `.vscode` directory is generated dynamically by `sm create` based on the selected tech stack and components.
+The `.vscode` directory is generated dynamically by `sm create` based on the selected preset and components.
 
 - `settings.json`: Includes formatting, validation, and other settings.
 - `extensions.json`: Recommends VS Code extensions to install.

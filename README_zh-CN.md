@@ -78,9 +78,9 @@ npm i -D @smallmains/dev
 ### create
 
 ```bash
-npx sm create                 # 交互式界面
-npx sm create --yes           # 直接创建，跳过交互式界面
-npx sm create --stack web     # 通过参数控制默认值，使用 `-h` 查看所有参数
+npx sm create                   # 交互式界面
+npx sm create --yes             # 直接创建，跳过交互式界面
+npx sm create --component react # 通过参数控制默认值，使用 `-h` 查看所有参数
 ```
 
 该命令用于快速创建预设模板项目。
@@ -159,7 +159,7 @@ npm i -D @smallmains/dev
 
 ## VS Code Config
 
-由 `sm create` 根据选择的技术栈和组件动态生成 `.vscode` 目录。
+由 `sm create` 根据选择的预设和组件动态生成 `.vscode` 目录。
 
 - `settings.json`：包括格式化、校验等设置。
 - `extensions.json`：推荐安装的 VS Code 扩展。
