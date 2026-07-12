@@ -354,6 +354,7 @@ async function runCreateForm(initialContext: CreateContext): Promise<CreateConte
     const cleanup = (): void => {
       stdin.off("keypress", onKeypress);
       stdin.setRawMode(previousRawMode);
+      stdin.pause();
       stdout.write("\x1B[?25h");
       stdout.write("\n");
     };
@@ -1005,6 +1006,7 @@ function createProjectPackageJson(context: CreateContext, packageJson: PackageJs
       url: `git+https://github.com/${context.githubOwner}/${context.githubRepo}.git`,
     },
     funding: packageJson.funding,
+    type: "module",
     scripts,
     devDependencies,
     devEngines: createDevEngines(context.packageManager, packageJson),
