@@ -35,6 +35,7 @@ test(
       await expectPathExists(path.join(projectDir, "package.json"));
       await expectPathExists(path.join(projectDir, ".git/HEAD"));
       await expectPathExists(path.join(projectDir, ".vscode/settings.json"));
+      await expectPathExists(path.join(projectDir, ".gitignore"));
       await expectPathExists(path.join(projectDir, "README.md"));
 
       const packageJson = await readJson<{
