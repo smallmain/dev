@@ -2,6 +2,7 @@ import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stdin, stdout } from "node:process";
 import { emitKeypressEvents } from "node:readline";
+import { runCheckCommand } from "./check.ts";
 import { commandSucceeds, runCommandOrThrow } from "./command-utils.ts";
 import {
   getAuthor,
@@ -172,7 +173,18 @@ export async function runCreateCommand(
   console.log(`Installing dependencies with ${context.packageManager}...`);
   await runCommandOrThrow(context.packageManager, ["install"], { cwd: targetDir });
 
+  await fixProject(targetDir);
+
   console.log(`Created ${context.packageName} in ${targetDir}`);
+}
+
+async function fixProject(targetDir: string): Promise<void> {
+  if (!(await pathExists(path.join(targetDir, "node_modules", "@smallmains", "dev")))) {
+    return;
+  }
+
+  console.log("Fixing and formatting files...");
+  await runCheckCommand([], { fix: true });
 }
 
 async function resolveCreateContext(

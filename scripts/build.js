@@ -85,6 +85,8 @@ async function buildTypeScriptConfig(sourceDir, targetDir) {
     "--strict",
     "--noEmitOnError",
     "--skipLibCheck",
+    "--types",
+    "node",
     "--rootDir",
     sourcePath,
     "--outDir",

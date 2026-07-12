@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "oxlint";
 import e18e from "./parts/e18e.js";
 import ts from "./parts/ts.js";
@@ -5,7 +6,10 @@ import { cssExtGlob } from "./shared.js";
 
 const base = defineConfig({
   plugins: ["eslint", "unicorn", "oxc", "import", "jsdoc", "promise", "typescript"],
-  jsPlugins: ["./plugins/comments.js", "./plugins/consistent-esm-default-name.js"],
+  jsPlugins: [
+    fileURLToPath(new URL("./plugins/comments.js", import.meta.url)),
+    fileURLToPath(new URL("./plugins/consistent-esm-default-name.js", import.meta.url)),
+  ],
   options: {
     typeAware: true,
     reportUnusedDisableDirectives: "warn",
@@ -251,9 +255,11 @@ const base = defineConfig({
   },
 });
 
-export default defineConfig({
+const generic = defineConfig({
   extends: [base, e18e, ts],
 });
+
+export default generic;
 
 export { default as react } from "./parts/react.js";
 export { default as vitest } from "./parts/vitest.js";
