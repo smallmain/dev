@@ -87,29 +87,37 @@ This command quickly creates a project from a preset template.
 
 - It does not empty the current working directory, but it will overwrite existing files.
 
-### lint
+### check
 
 ```bash
-npx sm lint                 # Check all files
-npx sm lint src/**/*.ts     # Check specified files
+npx sm check                 # Run linter and formatter checks
+npx sm check src/**/*.ts     # Check specified files
 
-npx sm lint --fix           # Automatically fix errors
+npx sm check --fix           # Automatically fix errors
+npx sm check --no-format     # Run only linter checks
+npx sm check --no-lint       # Run only formatter checks
 
-npx sm lint --commit-message "feat: add login"              # Check a commit message
-npx sm lint --commit-message .git/COMMIT_EDITMSG --file     # Check a commit message file
+npx sm check lint            # Run linter checks
+npx sm check format          # Run formatter checks
+npx sm check commit-message --text "feat: add login" # Check a commit message
+npx sm check commit-message .git/COMMIT_EDITMSG      # Check a commit message file
 ```
 
-This command checks files using Linters installed in the project.
+This command checks files using Linters and Formatters installed in the project.
 
 Supported Linters:
 
 - Oxlint
 - Stylelint
 
+Supported Formatters:
+
+- Oxfmt
+
 ### staged-run
 
 ```bash
-npx sm staged-run "npm run lint" "."
+npx sm staged-run "npm run check" "."
 ```
 
 This command appends matching Git staged files to the specified command and runs it.
@@ -122,8 +130,8 @@ npx sm set-git-hook
 
 This command installs preset Git Hooks:
 
-- `pre-commit`: Uses `sm staged-run` to run lint on staged files.
-- `commit-msg`: Uses `sm lint --commit-message "$1" --file` to validate commit messages.
+- `pre-commit`: Uses `sm staged-run` to run checks on staged files.
+- `commit-msg`: Uses `sm check commit-message "$1"` to validate commit messages.
 
 ## Editor Config
 

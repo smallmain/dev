@@ -1,34 +1,16 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import spawn, { SubprocessError } from "nano-spawn";
-import { beforeAll, expect, test } from "vitest";
+import { expect, test } from "vitest";
+import {
+  cliPath,
+  formatCommandFailure,
+  repoRoot,
+  runCommand,
+  testTimeoutMs,
+} from "./cli-e2e-utils.ts";
 
-interface CommandResult {
-  exitCode: number | null;
-  signal: NodeJS.Signals | null;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-}
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const cliPath = path.join(repoRoot, "dist/npm/dev/bin/sm.js");
-const testTimeoutMs = 300_000;
 const pathEnvKey = process.platform === "win32" ? "Path" : "PATH";
-
-beforeAll(async () => {
-  const result = await runCommand("pnpm", ["build"], {
-    cwd: repoRoot,
-    timeoutMs: testTimeoutMs,
-  });
-
-  expect(result, formatCommandFailure("pnpm build", result)).toMatchObject({
-    exitCode: 0,
-    timedOut: false,
-  });
-}, testTimeoutMs);
 
 test(
   "creates a package with the default options",
@@ -66,6 +48,8 @@ test(
       const oxlintConfig = await readFile(path.join(projectDir, "oxlint.config.ts"), "utf8");
 
       expect(packageJson.name).toBe(expectedName);
+      expect(packageJson.scripts?.check).toBe("sm check");
+      expect(packageJson.scripts?.["check:fix"]).toBe("sm check --fix");
       expect(packageJson.scripts?.prepare).toBe("sm set-git-hook");
       expect(packageJson.scripts?.test).toBe("vitest");
       expect(packageJson.devDependencies).toHaveProperty("vitest");
@@ -136,6 +120,8 @@ test(
       );
 
       expect(packageJson.scripts?.prepare).toBeUndefined();
+      expect(packageJson.scripts?.check).toBe("sm check");
+      expect(packageJson.scripts?.["check:fix"]).toBe("sm check --fix");
       expect(packageJson.scripts?.test).toBe("vitest");
       expect(packageJson.devDependencies).toHaveProperty("@types/node");
       expect(packageJson.devDependencies).toHaveProperty("stylelint");
@@ -198,50 +184,6 @@ test(
   testTimeoutMs,
 );
 
-async function runCommand(
-  command: string,
-  args: string[],
-  options: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number },
-): Promise<CommandResult> {
-  const abortController = new AbortController();
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    abortController.abort();
-  }, options.timeoutMs);
-
-  try {
-    const result = await spawn(command, args, {
-      cwd: options.cwd,
-      env: { CI: "1", ...options.env },
-      signal: abortController.signal,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    return {
-      exitCode: 0,
-      signal: null,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      timedOut,
-    };
-  } catch (error) {
-    if (error instanceof SubprocessError) {
-      return {
-        exitCode: error.exitCode ?? null,
-        signal: (error.signalName as NodeJS.Signals | undefined) ?? null,
-        stdout: error.stdout,
-        stderr: error.stderr,
-        timedOut,
-      };
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 async function expectPathExists(filePath: string): Promise<void> {
   await expect(stat(filePath)).resolves.toBeDefined();
 }
@@ -298,19 +240,6 @@ async function cleanupProjectDir(projectDir: string, passed: boolean): Promise<v
   }
 
   await rm(projectDir, { force: true, recursive: true });
-}
-
-function formatCommandFailure(command: string, result: CommandResult): string {
-  return [
-    `${command} failed.`,
-    `exitCode: ${String(result.exitCode)}`,
-    `signal: ${String(result.signal)}`,
-    `timedOut: ${String(result.timedOut)}`,
-    "stdout:",
-    result.stdout,
-    "stderr:",
-    result.stderr,
-  ].join("\n");
 }
 
 function toPackageName(value: string): string {

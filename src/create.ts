@@ -962,8 +962,8 @@ function renderChoice(choice: string, focused: boolean): string {
 function createProjectPackageJson(context: CreateContext, packageJson: PackageJson): unknown {
   const author = getAuthor(packageJson);
   const scripts: Record<string, string> = {
-    lint: "sm lint",
-    "lint:fix": "sm lint --fix",
+    check: "sm check",
+    "check:fix": "sm check --fix",
   };
 
   if (hasGitHookComponent(context)) {

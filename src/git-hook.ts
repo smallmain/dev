@@ -11,7 +11,7 @@ const managedCommitMessageMarker = "# sm managed commit-msg hook";
 const commitMessageHookContent = `#!/bin/sh
 ${managedCommitMessageMarker}
 PATH="$(git rev-parse --show-toplevel)/node_modules/.bin:$PATH"
-sm lint --commit-message "$1" --file
+sm check commit-message "$1"
 `;
 
 export async function runSetGitHookCommand(options: RawSetGitHookOptions): Promise<void> {
@@ -133,7 +133,7 @@ function createPreCommitHookContent(packageManager: "npm" | "pnpm"): string {
   return `#!/bin/sh
 ${managedPreCommitMarker}
 PATH="$(git rev-parse --show-toplevel)/node_modules/.bin:$PATH"
-sm staged-run "${packageManager} run lint" "."
+sm staged-run "${packageManager} run check" "."
 `;
 }
 

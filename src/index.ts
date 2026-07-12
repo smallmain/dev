@@ -1,12 +1,27 @@
 import { Command } from "commander";
+import {
+  runCheckCommand,
+  runCheckCommitMessageCommand,
+  runCheckFormatCommand,
+  runCheckLintCommand,
+} from "./check.ts";
 import { runCreateCommand } from "./create.ts";
 import { runSetGitHookCommand } from "./git-hook.ts";
-import { runLintCommand } from "./lint.ts";
 import { readPackageJson } from "./package-info.ts";
 import { runStagedRunCommand } from "./staged-run.ts";
 
 function collectOption(value: string, previousValues: string[]): string[] {
   return [...previousValues, value];
+}
+
+function getCheckSubcommandFixOption(
+  options: { fix?: boolean },
+  command: Command,
+): boolean | undefined {
+  const ownOptions = options;
+  const parentOptions = command.parent?.opts<{ fix?: boolean }>();
+
+  return ownOptions.fix ?? parentOptions?.fix;
 }
 
 async function main(): Promise<void> {
@@ -44,14 +59,38 @@ async function main(): Promise<void> {
     )
     .action(options => runCreateCommand(options, packageJson));
 
-  program
-    .command("lint [files...]")
-    .description("Run project lint tools.")
-    .option("--commit-message <message>", "Lint a commit message.")
-    .option("--file", "Read --commit-message as a file path.")
+  const checkCommand = program
+    .command("check [files...]")
+    .description("Run project checks.")
+    .option("--no-lint", "Skip linter checks.")
+    .option("--no-format", "Skip formatter checks.")
     .option("--fix", "Automatically fix problems.")
-    .action((files: string[], options: { commitMessage?: string; file?: boolean; fix?: boolean }) =>
-      runLintCommand(files, options),
+    .action((files: string[], options: { lint?: boolean; format?: boolean; fix?: boolean }) =>
+      runCheckCommand(files, options),
+    );
+
+  checkCommand
+    .command("lint [files...]")
+    .description("Run project linter checks.")
+    .option("--fix", "Automatically fix problems.")
+    .action((files: string[], options: { fix?: boolean }, command: Command) =>
+      runCheckLintCommand(files, { fix: getCheckSubcommandFixOption(options, command) }),
+    );
+
+  checkCommand
+    .command("format [files...]")
+    .description("Run project formatter checks.")
+    .option("--fix", "Automatically fix problems.")
+    .action((files: string[], options: { fix?: boolean }, command: Command) =>
+      runCheckFormatCommand(files, { fix: getCheckSubcommandFixOption(options, command) }),
+    );
+
+  checkCommand
+    .command("commit-message [file]")
+    .description("Check a commit message.")
+    .option("--text <message>", "Check the passed commit message text.")
+    .action((file: string | undefined, options: { text?: string }) =>
+      runCheckCommitMessageCommand(file, options),
     );
 
   program

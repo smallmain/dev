@@ -31,9 +31,56 @@
   - `CSS` 子选项：
     - `CSS`: 支持 `Native`、`CSS Modules`、`Tailwind CSS`。
 
-### lint
+### check
 
-该命令使用项目中安装的 Linter 进行检查。
+该命令使用项目中的检查工具对项目进行检查。
+
+`check`
+
+相当于同时执行 `check lint` 和 `check format`。
+
+支持的命令行参数：
+
+- `files...`: 指定检查的文件列表，若不传入则默认按规则检查所有项目文件。
+- `--no-lint`: 不执行 Linter 检查。
+- `--no-format`: 不执行 Formatter 检查。
+- `--fix`: 自动修复可修复的问题。
+
+`check lint`
+
+执行 Linter 检查。
+
+支持的 Linter 列表：
+
+- Oxlint
+- Stylelint
+
+支持的命令行参数：
+
+- `files...`: 指定检查的文件列表，若不传入则默认按规则检查所有项目文件。
+- `--fix`: 自动修复可修复的问题。
+
+`check format`
+
+执行 Formatter 检查。
+
+支持的 Formatter 列表：
+
+- Oxfmt
+
+支持的命令行参数：
+
+- `files...`: 指定检查的文件列表，若不传入则默认按规则检查所有项目文件。
+- `--fix`: 自动修复可修复的问题。
+
+`check commit-message`
+
+检查提交信息是否符合规范。
+
+支持的命令行参数：
+
+- `file`: 指定检查的提交信息文件路径，若不传入则默认检查 `.git/COMMIT_EDITMSG` 文件（自动查找父级 Git 目录）。
+- `--text`: 检查传入的提交信息文本。
 
 ### staged-run
 
