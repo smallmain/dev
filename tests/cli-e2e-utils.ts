@@ -12,6 +12,8 @@ export interface CommandResult {
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const cliPath = path.join(repoRoot, "dist/npm/dev/bin/sm.js");
+export const distDir = path.join(repoRoot, "dist/npm/dev");
+export const oxlintBin = path.join(repoRoot, "node_modules/.bin/oxlint");
 export const testTimeoutMs = 300_000;
 
 export async function buildCli(): Promise<void> {
@@ -91,4 +93,57 @@ export function formatCommandFailure(command: string, result: CommandResult): st
     "stderr:",
     result.stderr,
   ].join("\n");
+}
+
+export function createGitEnv(homeDir: string, extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return {
+    GIT_CONFIG_NOSYSTEM: "1",
+    HOME: homeDir,
+    USERPROFILE: homeDir,
+    ...extra,
+  };
+}
+
+export async function initGitRepo(cwd: string): Promise<NodeJS.ProcessEnv> {
+  const env = createGitEnv(cwd);
+
+  await runCommand("git", ["init"], { cwd, env, timeoutMs: testTimeoutMs });
+  await runCommand("git", ["config", "user.email", "sm-test@example.com"], {
+    cwd,
+    env,
+    timeoutMs: testTimeoutMs,
+  });
+  await runCommand("git", ["config", "user.name", "sm test"], {
+    cwd,
+    env,
+    timeoutMs: testTimeoutMs,
+  });
+  await runCommand("git", ["config", "commit.gpgsign", "false"], {
+    cwd,
+    env,
+    timeoutMs: testTimeoutMs,
+  });
+
+  return env;
+}
+
+export async function runOxlint(options: {
+  configPath: string;
+  cwd: string;
+  fix?: boolean;
+  targets: string[];
+}): Promise<CommandResult> {
+  return runCommand(
+    oxlintBin,
+    [
+      "-c",
+      options.configPath,
+      "--disable-nested-config",
+      "--format",
+      "json",
+      ...(options.fix === true ? ["--fix"] : []),
+      ...options.targets,
+    ],
+    { cwd: options.cwd, timeoutMs: testTimeoutMs },
+  );
 }

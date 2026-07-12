@@ -505,6 +505,7 @@ export default createStore();
 - Run `pnpm run dev` to run the CLI from source.
 - Run `pnpm run dev:prod` to build and run the CLI from the output.
 - Run `pnpm run build` to build the project.
+- Run `pnpm test` to run the test suite.
 - Run `pnpm run publish` to publish a new version. When `--version` is specified, it updates `package.json`, commits and pushes the version change, builds, then publishes.
   - `--version <version>`: Specifies the version number, such as `patch`, `minor`, `major`, or an exact version.
 

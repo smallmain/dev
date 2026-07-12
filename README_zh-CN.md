@@ -505,6 +505,7 @@ export default createStore();
 - 执行 `pnpm run dev` 从源码运行 CLI。
 - 执行 `pnpm run dev:prod` 构建并从产物运行 CLI。
 - 执行 `pnpm run build` 构建项目。
+- 执行 `pnpm test` 运行测试。
 - 执行 `pnpm run publish` 发布新版本；指定 `--version` 时会先更新 `package.json`，提交并推送版本变更，再构建并发布。
   - `--version <version>`：指定版本号（例如 `patch`、`minor`、`major` 或具体版本号）。
 
