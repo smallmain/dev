@@ -20,7 +20,7 @@
 <!-- <br>
 <p align="center">
 <span>English</span> |
-<a href="./README_zh-CN.md">简体中文</a>
+<a href="./README.zh.md">简体中文</a>
 </p> -->
 
 <!-- ## Introduction

@@ -20,7 +20,7 @@ Development scaffolding used by SmallMain.
 <br>
 <p align="center">
 <span>English</span> |
-<a href="./README_zh-CN.md">简体中文</a>
+<a href="./README.zh.md">简体中文</a>
 </p>
 
 ## Overview
@@ -42,7 +42,10 @@ Development scaffolding used by SmallMain.
     <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.06.15</td>
   </tr>
   <tr>
-    <td rowspan="5">Web</td>
+    <td rowspan="6">Web</td>
+  </tr>
+  <tr>
+    <td><a href="#web-specification">Specification</a></td><td>2025.08.14</td>
   </tr>
   <tr>
     <td><a href="#ts-config">TS Config</a></td><td>2025.06.15</td>
@@ -132,6 +135,14 @@ This command installs preset Git Hooks:
 
 - `pre-commit`: Uses `sm staged-run` to run checks on staged files.
 - `commit-msg`: Uses `sm check commit-message "$1"` to validate commit messages.
+
+## Specification
+
+### Web Specification
+
+| Path                  | Description            |
+| --------------------- | ---------------------- |
+| `templates/web/specs` | General configuration. |
 
 ## Editor Config
 

@@ -1,5 +1,7 @@
 # JSDoc Specification
 
+[English](jds.md) | 简体中文
+
 ## @deprecated
 
 该标签用于标记已被废弃的符号。

@@ -1,11 +1,13 @@
-# 测试
+# Testing
 
-使用 Vitest 进行测试。
+English | [简体中文](test.zh.md)
 
-## 端到端测试
+Use Vitest for testing.
 
-CLI 命令与 Oxlint 插件均以端到端方式验证：
+## End-to-end tests
 
-- 在临时目录中搭建真实项目夹具，通过真实命令与真实工具链（如 Oxlint、Stylelint、Git）运行被测逻辑。
-- 不得对被测命令自身或其调用的工具链进行 mock 或打桩。
-- 仅当依赖会产生不可控的外部副作用（如联网安装依赖）时，方可在该外部边界使用最小化替身，且替身不得改变被测命令的行为。
+CLI commands and Oxlint plugins are both verified end-to-end:
+
+- Set up a real project fixture in a temporary directory, and run the logic under test through real commands and a real toolchain (such as Oxlint, Stylelint, and Git).
+- Do not mock or stub the command under test itself or the toolchain it invokes.
+- Only when a dependency would produce uncontrollable external side effects (such as installing dependencies over the network) may a minimal stand-in be used at that external boundary, and the stand-in must not change the behavior of the command under test.

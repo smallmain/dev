@@ -1,5 +1,7 @@
 # ECMAScript Package Specification
 
+[English](esp.md) | 简体中文
+
 ## 简介
 
 本文为 ECMAScript 制定了一种 Package 的组织规范。

@@ -1,5 +1,7 @@
 # TypeScript Coding Specification
 
+[English](coding.md) | 简体中文
+
 ## 命名
 
 ### 代码符号
@@ -128,7 +130,7 @@
 
 ### 标签参考
 
-以下仅列出常用标签及其简介，部分标签的详细说明可查看 [JSDoc Specification](./jsdoc.md)。
+以下仅列出常用标签及其简介，部分标签的详细说明可查看 [JSDoc Specification](./jds.zh.md)。
 
 **接口稳定性**
 
@@ -153,7 +155,7 @@
 
 **身份标识**
 
-- `@module` - 模块，详情可查看：[ECMAScript Package Specification](./esp.md)。
+- `@module` - 模块，详情可查看：[ECMAScript Package Specification](./esp.zh.md)。
 - `@event` - 事件。
 - `@decorator` - 装饰器。
 

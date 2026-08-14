@@ -42,7 +42,10 @@ SmallMain 使用的开发脚手架。
     <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.06.15</td>
   </tr>
   <tr>
-    <td rowspan="5">Web</td>
+    <td rowspan="6">Web</td>
+  </tr>
+  <tr>
+    <td><a href="#web-specification">Specification</a></td><td>2025.08.14</td>
   </tr>
   <tr>
     <td><a href="#ts-config">TS Config</a></td><td>2025.06.15</td>
@@ -132,6 +135,14 @@ npx sm set-git-hook
 
 - `pre-commit`: 使用 `sm staged-run` 对暂存文件执行检查。
 - `commit-msg`: 使用 `sm check commit-message "$1"` 校验提交信息。
+
+## Specification
+
+### Web Specification
+
+| 路径                  | 说明       |
+| --------------------- | ---------- |
+| `templates/web/specs` | 通用配置。 |
 
 ## Editor Config
 
