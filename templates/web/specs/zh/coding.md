@@ -272,6 +272,11 @@ type Getter<T = unknown, This = void> = (this: This) => T;
       2. Try to use the `ignoreCase` option.
   ```
 
+## 测试
+
+- 单元测试文件应与被测试的源文件放在同一目录下，并使用相同的文件名，增加后缀 `.test`。
+- 集成测试、端到端测试应单独放在 `tests` 目录下。
+
 ## 最佳实践
 
 - 对外公开的符号必须编写文档注释，否则仅当代码晦涩、需进一步说明时才编写注释。
