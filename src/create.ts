@@ -2,7 +2,7 @@ import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stdin, stdout } from "node:process";
 import { emitKeypressEvents } from "node:readline";
-import { runCheckCommand } from "./check.ts";
+import { runCheckOrThrow } from "./check.ts";
 import { commandSucceeds, runCommandOrThrow } from "./command-utils.ts";
 import {
   getAuthor,
@@ -184,7 +184,7 @@ async function fixProject(targetDir: string): Promise<void> {
   }
 
   console.log("Fixing and formatting files...");
-  await runCheckCommand([], { fix: true });
+  await runCheckOrThrow([], { fix: true });
 }
 
 async function resolveCreateContext(

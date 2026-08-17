@@ -116,3 +116,27 @@ for (const variant of variants) {
     testTimeoutMs,
   );
 }
+
+test(
+  "create fails when the generated project does not pass its final checks",
+  async () => {
+    await withInstalledProject(async ({ projectDir, env }) => {
+      await mkdir(path.join(projectDir, "src"), { recursive: true });
+      await writeFile(
+        path.join(projectDir, "src/missing-description.ts"),
+        "/* oxlint-disable no-console */\nexport const value = 1;\n",
+      );
+
+      const create = await runCommand(process.execPath, [cliPath, "create", "--yes"], {
+        cwd: projectDir,
+        env,
+        timeoutMs: testTimeoutMs,
+      });
+
+      expect(create.exitCode).not.toBe(0);
+      expect(create.stdout).not.toContain("Created ");
+      expect(create.stderr).toContain("Project checks failed with exit code");
+    });
+  },
+  testTimeoutMs,
+);

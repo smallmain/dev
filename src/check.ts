@@ -77,6 +77,18 @@ const stylelintExtensions = new Set([
 ]);
 
 export async function runCheckCommand(files: string[], options: RawCheckOptions): Promise<void> {
+  setExitCode(await runCheck(files, options));
+}
+
+export async function runCheckOrThrow(files: string[], options: RawCheckOptions): Promise<void> {
+  const exitCode = await runCheck(files, options);
+
+  if (exitCode !== 0) {
+    throw new Error(`Project checks failed with exit code ${exitCode}.`);
+  }
+}
+
+async function runCheck(files: string[], options: RawCheckOptions): Promise<number> {
   let exitCode = 0;
 
   if (options.lint !== false) {
@@ -87,7 +99,7 @@ export async function runCheckCommand(files: string[], options: RawCheckOptions)
     exitCode = await runAndMergeExitCode(exitCode, runFormatCheck(files, options));
   }
 
-  setExitCode(exitCode);
+  return exitCode;
 }
 
 export async function runCheckLintCommand(files: string[], options: RawLintOptions): Promise<void> {

@@ -56,7 +56,7 @@ Generation rules:
 - If the current directory is not inside a Git worktree, run `git init`.
 - Generate configuration and dependencies from `Runtime`, `Components`, and `CSS`; Vitest is always enabled.
 - Install dependencies with the selected package manager.
-- After installation, if `@smallmains/dev` exists in the project, run project checks in fix mode and format the files.
+- After installation, if `@smallmains/dev` exists in the project, run project checks in fix mode and format the files. A check failure makes creation fail.
 
 Generated output:
 

@@ -4,6 +4,18 @@ English | [简体中文](package.zh.md)
 
 This proposal defines how the npm package is built and published.
 
+## Development
+
+`pnpm run dev` runs the CLI directly from `src/index.ts` with Node.js type stripping enabled.
+`pnpm run dev:prod` rebuilds the complete package first, then runs the generated `bin/sm.js`.
+
+Both commands follow the same invocation rules:
+
+- Remove one leading `--` argument before forwarding the remaining arguments to the CLI.
+- Use `--help` when no CLI arguments remain.
+- Run the CLI in `INIT_CWD` when it is set; otherwise, use the script process's current working directory.
+- Inherit standard input, output, and error, and fail when the CLI process fails.
+
 ## Build
 
 Build output is always written to `dist/npm/dev`, and that directory is deleted and recreated before every build.

@@ -538,7 +538,7 @@ export default createStore();
 
 ### CLI create
 
-`npx sm create` 命令会使用 `package.json` 中的字段作为默认值。
+`npx sm create` 命令会使用 `@smallmains/dev` 自身 `package.json` 中的字段生成部分值。
 
 ## 许可证
 

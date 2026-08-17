@@ -538,7 +538,7 @@ export default createStore();
 
 ### CLI create
 
-The `npx sm create` command uses fields from `package.json` as default values.
+The `npx sm create` command uses the fields in the `@smallmains/dev` package's `package.json` file to generate some values.
 
 ## License
 
