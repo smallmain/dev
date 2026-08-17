@@ -1,5 +1,15 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  test: {},
+  test: {
+    coverage: {
+      enabled: true,
+    },
+    typecheck: {
+      enabled: true,
+    },
+    expect: {
+      requireAssertions: true,
+    },
+  },
 });

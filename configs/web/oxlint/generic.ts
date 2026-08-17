@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "oxlint";
+import { cssExtGlob } from "../shared/file-extension.js";
 import e18e from "./parts/e18e.js";
 import ts from "./parts/ts.js";
-import { cssExtGlob } from "./shared.js";
 
 const base = defineConfig({
   plugins: ["eslint", "unicorn", "oxc", "import", "jsdoc", "promise", "typescript"],
@@ -262,6 +262,7 @@ const generic = defineConfig({
 export default generic;
 
 export { default as react } from "./parts/react.js";
+export { default as nextjs } from "./parts/nextjs.js";
 export { default as vitest } from "./parts/vitest.js";
 export { default as nodejs } from "./parts/nodejs.js";
 export { default as security } from "./parts/security.js";

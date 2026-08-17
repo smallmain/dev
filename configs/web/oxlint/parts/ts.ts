@@ -1,5 +1,5 @@
 import { defineConfig } from "oxlint";
-import { tsExtGlob } from "../shared.js";
+import { tsExtGlob } from "../../shared/file-extension.js";
 
 export default defineConfig({
   overrides: [

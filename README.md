@@ -42,10 +42,13 @@ Development scaffolding used by SmallMain.
     <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.06.15</td>
   </tr>
   <tr>
-    <td rowspan="6">Web</td>
+    <td rowspan="2">Specification</td>
   </tr>
   <tr>
-    <td><a href="#web-specification">Specification</a></td><td>2025.08.14</td>
+    <td><a href="#web-specification">Web</a></td><td>2025.08.14</td>
+  </tr>
+  <tr>
+    <td rowspan="5">Web</td>
   </tr>
   <tr>
     <td><a href="#ts-config">TS Config</a></td><td>2025.06.15</td>
@@ -63,14 +66,19 @@ Development scaffolding used by SmallMain.
     <td rowspan="3">Oxlint Plugin</td>
   </tr>
   <tr>
-    <td><a href="#">comments</a></td><td>2025.06.15</td>
+    <td><a href="#comments">comments</a></td><td>2025.06.15</td>
   </tr>
     <tr>
-    <td><a href="#">consistent-esm-default-name</a></td><td>2025.06.15</td>
+    <td><a href="#consistent-esm-default-name">consistent-esm-default-name</a></td><td>2025.06.15</td>
   </tr>
 </table>
 
 ## CLI
+
+Requirements:
+
+- Node.js 24
+- Git
 
 Install:
 
@@ -121,6 +129,7 @@ Supported Formatters:
 
 ```bash
 npx sm staged-run "npm run check" "."
+npx sm staged-run --update-index "npm run check:fix" "." # Re-stage files after automatic fixes
 ```
 
 This command appends matching Git staged files to the specified command and runs it.
@@ -133,6 +142,7 @@ npx sm set-git-hook
 
 This command installs preset Git Hooks:
 
+- Existing hooks are overwritten.
 - `pre-commit`: Uses `sm staged-run` to run checks on staged files.
 - `commit-msg`: Uses `sm check commit-message "$1"` to validate commit messages.
 
@@ -140,9 +150,12 @@ This command installs preset Git Hooks:
 
 ### Web Specification
 
-| Path                  | Description            |
-| --------------------- | ---------------------- |
-| `templates/web/specs` | General configuration. |
+| Path                  | Description                       |
+| --------------------- | --------------------------------- |
+| `specs/web/coding.md` | TypeScript coding specification.  |
+| `specs/web/ecc.md`    | ECMAScript conditional constants. |
+| `specs/web/esp.md`    | ECMAScript package specification. |
+| `specs/web/jds.md`    | JSDoc specification.              |
 
 ## Editor Config
 
@@ -169,12 +182,12 @@ Example:
 }
 ```
 
-| Path                              | Description                                                                     |
-| --------------------------------- | ------------------------------------------------------------------------------- |
-| `@smallmains/dev/ts/base.json`    | Base configuration.                                                             |
-| `@smallmains/dev/ts/generic.json` | Configuration for neutral runtime environments using NodeNext modules.          |
-| `@smallmains/dev/ts/browser.json` | Configuration for browser runtime environments using Bundler module resolution. |
-| `@smallmains/dev/ts/nodejs.json`  | Configuration for Node.js projects.                                             |
+| Path                              | Description                                                          |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `@smallmains/dev/ts/base.json`    | Base configuration.                                                  |
+| `@smallmains/dev/ts/generic.json` | Configuration for neutral runtimes using the `preserve` module mode. |
+| `@smallmains/dev/ts/browser.json` | Configuration for browser runtimes using the `esnext` module mode.   |
+| `@smallmains/dev/ts/nodejs.json`  | Configuration for Node.js runtimes using the `nodenext` module mode. |
 
 ## VS Code Config
 
@@ -209,6 +222,7 @@ All configurations are exported through `@smallmains/dev/oxlint/generic.js`:
 - `default`: General configuration.
 - `vitest`: Configuration for projects using Vitest.
 - `react`: Configuration for projects using React.
+- `nextjs`: Configuration for projects using Next.js.
 - `nodejs`: Configuration for projects using Node.js.
 - `security`: Configuration for security-conscious projects.
 
@@ -247,9 +261,11 @@ Example:
 `stylelint.config.ts`
 
 ```ts
-{
-  "extends": "@smallmains/dev/stylelint/generic.js",
-}
+import type { Config } from "stylelint";
+
+export default {
+  extends: "@smallmains/dev/stylelint/generic.js",
+} satisfies Config;
 ```
 
 | Path                                       | Description                                    |
@@ -291,9 +307,9 @@ Rules:
 
 #### require-description
 
-| Option   | Type       | Default | Description                |
-| -------- | ---------- | ------- | -------------------------- |
-| `ignore` | `string[]` | `[]`    | Ignores specific comments. |
+| Option   | Type       | Default | Description                                      |
+| -------- | ---------- | ------- | ------------------------------------------------ |
+| `ignore` | `string[]` | `[]`    | Ignores specified Oxlint inline ignore comments. |
 
 Allowed values:
 
@@ -302,19 +318,17 @@ Allowed values:
 "oxlint-enable"
 "oxlint-disable-line"
 "oxlint-disable-next-line"
-"eslint-disable"
-"eslint-enable"
-"eslint-disable-line"
-"eslint-disable-next-line"
 ```
 
 ### consistent-esm-default-name
 
 - Supports ESM only; CommonJS and other module systems are not checked.
-- Resolves the exported symbol name from the imported target module first. If it cannot be resolved, a valid identifier is generated from the module path.
+- `default-import-name` prefers the named default export from the imported target module and generates a valid identifier from the module path only when no name can be obtained.
 - Infers `index` directory imports from the parent directory name, for example `./Button/index` maps to `Button`.
 - Directory imports first consider the directory's own `package.json#name`; otherwise, the directory name is used.
-- Anonymous exports, literal exports, object exports, and call-expression exports are ignored.
+- `default-export-name` checks named default export names against the current file path and templates.
+- Both rules automatically fix bindings and all their references when they can be renamed safely.
+- `default-export-name` ignores default exports without binding names; when these modules are imported, `default-import-name` still falls back to the module path.
 
 Example:
 
@@ -347,10 +361,10 @@ export default defineConfig({
 
 Rules:
 
-| Rule                                              | Description                                                                                          |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `consistent-esm-default-name/default-import-name` | Checks whether default import names like `import Foo from "./foo"` conform to the naming convention. |
-| `consistent-esm-default-name/default-export-name` | Checks whether default export names like `export default Foo` conform to the naming convention.      |
+| Rule                                              | Description                                                                                       |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `consistent-esm-default-name/default-import-name` | Checks the local binding name of a default import and fixes it automatically when safe.           |
+| `consistent-esm-default-name/default-export-name` | Checks a named default export against the current file path and fixes it automatically when safe. |
 
 #### Settings
 
@@ -405,7 +419,7 @@ export default function generatedClient() {}
 
 **template**
 
-- Description: When the exported symbol name cannot be resolved from the imported target module, derives the name from the import path according to templates. Templates are matched in array order, and the first matching entry is used.
+- Description: When `default-import-name` cannot obtain a named default export from the imported target module, it derives the name from the import path according to templates. `default-export-name` derives the expected name from the current file path and templates. Templates are matched in array order, and the first matching entry is used.
 - Type: `TemplateEntry[]`
 - Default:
 
@@ -439,19 +453,21 @@ TypeScript algorithm:
    - `button.tsx` -> `button`
    - `user.service.ts` -> `user.service`
 
-3. Treat characters that cannot appear in identifiers as separators, remove them, and uppercase the next valid character
+3. If the first character cannot start an identifier, prefix `_`
+   - `123abc` -> `_123abc`
+
+4. Treat characters that cannot be part of identifiers as separators, remove them, and uppercase the next valid character
    - `foo-bar` -> `fooBar`
    - `foo.bar` -> `fooBar`
    - `foo bar` -> `fooBar`
 
-4. Preserve characters that can be part of identifiers
+5. Preserve characters that can be part of identifiers
    - `foo_bar` -> `foo_bar`
    - `$foo` -> `$foo`
    - `_foo` -> `_foo`
 
-5. If the result is empty or a reserved word, append `_`
+6. If the result is empty, fall back to `_`; if it is a reserved word, prefix `_`
    - `class` -> `_class`
-   - `123abc` -> `abc`, or fallback to `_` when no valid start can be derived
 
 Examples:
 
@@ -504,7 +520,7 @@ Corresponding file:
 export default class UserService {}
 ```
 
-Anonymous exports, literal exports, object exports, and call-expression exports are ignored:
+The following default exports without binding names are ignored by `default-export-name`; when they are imported, `default-import-name` falls back to the module path and `template`:
 
 ```ts
 export default { ok: true };

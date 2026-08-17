@@ -1,0 +1,30 @@
+# 包构建与发布
+
+[English](package.md) | 简体中文
+
+本提案定义 npm 包的构建与发布方式。
+
+## 构建
+
+构建产物固定输出到 `dist/npm/dev`，每次构建前删除并重新创建该目录。
+
+构建规则：
+
+- 从根目录 `package.json` 生成产物的 `package.json`，删除仅用于仓库开发的 `scripts` 和 `devEngines`。
+- 将 `configs/web/typescript` 复制到 `ts`，将 `configs/common` 和 `templates` 保持目录结构复制到产物。
+- 将整个 `configs/web` 作为一次 TypeScript 编译，保持 `oxlint`、`oxfmt`、`stylelint` 和内部 `shared` 目录结构，同时生成 JavaScript 和类型声明；源码中的相对导入使用 `.js` 扩展名。
+- 将整个 `src` 作为另一次 TypeScript 编译输出到 `cli`，使用 NodeNext 模块解析并重写相对 TypeScript 导入扩展名。
+- 生成可执行入口 `bin/sm.js`，以及空的包入口 `index.js` 和 `types/index.d.ts`。
+- 根目录 `package.json#files` 决定发布内容，并必须包含编译后配置运行时依赖的内部目录。
+
+## 发布
+
+`pnpm run publish` 从 `dist/npm/dev` 发布，脚本消费自定义的 `--version` 参数，其它参数原样传给 `pnpm publish`。
+
+发布规则：
+
+- 未指定 `--version` 时使用根目录 `package.json` 的当前版本。
+- `--version` 支持 `major`、`minor`、`patch` 或具体 SemVer；非法版本以及与当前版本相同的版本会失败。
+- 指定版本且不是 dry run 时，工作树必须干净；先更新根目录 `package.json`，创建 `chore: release v<version>` 提交并推送，再构建和发布。
+- 指定版本且传给 pnpm 的参数包含 `--dry-run` 或 `--dry-run=true` 时，不修改源码或 Git，只修改构建产物中的版本。
+- 发布前始终重新构建，并在产物目录中执行 `pnpm publish`。

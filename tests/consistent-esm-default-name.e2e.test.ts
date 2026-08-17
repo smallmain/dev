@@ -128,11 +128,12 @@ async function writeFixtures(cwd: string): Promise<void> {
       'import badScopedButton from "@scope/ui/button";',
       'import badKebab from "./user-service";',
       'import badAnon from "./anonymous-default";',
+      'import badLeadingDigit from "./123abc";',
       'import badReExport from "./re-export";',
       'import badIndex from "./components/Button/index";',
       'import badDir from ".";',
       'import badSubpath from "lodash/merge";',
-      "console.log(badStyled, badFooBar, badUi, badScopedButton, badKebab, badAnon, badReExport, badIndex, badDir, badSubpath);",
+      "console.log(badStyled, badFooBar, badUi, badScopedButton, badKebab, badAnon, badLeadingDigit, badReExport, badIndex, badDir, badSubpath);",
       "",
     ].join("\n"),
   );
@@ -153,6 +154,7 @@ async function writeFixtures(cwd: string): Promise<void> {
   );
   await writeFixture(cwd, "src/user-service.ts", "export default class UserService {}\n");
   await writeFixture(cwd, "src/anonymous-default.ts", "export default {};\n");
+  await writeFixture(cwd, "src/123abc.ts", "export default {};\n");
   await writeFixture(cwd, "src/re-export.ts", 'export { default } from "./target";\n');
   await writeFixture(cwd, "src/target.ts", "export default function targetName() {}\n");
   await writeFixture(
@@ -205,6 +207,56 @@ async function writeFixtures(cwd: string): Promise<void> {
     'import Alpha from "./cache-target";\nconsole.log(Alpha);\n',
   );
   await writeFixture(cwd, "src/cache-target.ts", "export default function Alpha() {}\n");
+  await writeFixture(
+    cwd,
+    "src/ExportClass.ts",
+    [
+      "export default class wrongClass {",
+      "  static create(): wrongClass {",
+      "    return new wrongClass();",
+      "  }",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFixture(
+    cwd,
+    "src/export-function.ts",
+    ["export default function wrongFunction(): unknown {", "  return wrongFunction;", "}", ""].join(
+      "\n",
+    ),
+  );
+  await writeFixture(
+    cwd,
+    "src/export-binding.ts",
+    [
+      "const wrongBinding = 1;",
+      "console.log(wrongBinding);",
+      "export default wrongBinding;",
+      "",
+    ].join("\n"),
+  );
+  await writeFixture(
+    cwd,
+    "src/export-specifier.ts",
+    [
+      "const wrongSpecifier = 1;",
+      "console.log(wrongSpecifier);",
+      "export { wrongSpecifier as default };",
+      "",
+    ].join("\n"),
+  );
+  await writeFixture(
+    cwd,
+    "src/export-conflict.ts",
+    [
+      "const exportConflict = 1;",
+      "const wrongConflict = 2;",
+      "console.log(exportConflict, wrongConflict);",
+      "export default wrongConflict;",
+      "",
+    ].join("\n"),
+  );
 }
 
 test(
@@ -233,6 +285,7 @@ test(
         run.stdout,
         "anonymous relative default should fall back to module specifier",
       ).toContain("anonymousDefault");
+      expect(run.stdout, "invalid identifier start should be prefixed").toContain("_123abc");
       expect(run.stdout, "default re-export should follow target module").toContain("targetName");
       expect(run.stdout, "directory import should use target package name").toContain(
         "sourcePackage",
@@ -356,6 +409,58 @@ test(
       expect(fixedUnsafe, "unsafe fixer should not rename conflicting binding").toContain(
         "import wrong",
       );
+    });
+  },
+  testTimeoutMs,
+);
+
+test(
+  "the default export fixer renames declarations, bindings, and references safely",
+  async () => {
+    await withPluginFixture(async ({ cwd }) => {
+      const fixRun = await runOxlint({
+        configPath: "default.config.json",
+        cwd,
+        fix: true,
+        targets: [
+          "src/ExportClass.ts",
+          "src/export-function.ts",
+          "src/export-binding.ts",
+          "src/export-specifier.ts",
+        ],
+      });
+
+      expect(fixRun.exitCode, fixRun.stdout || fixRun.stderr).toBe(0);
+
+      const fixedClass = await readFile(path.join(cwd, "src/ExportClass.ts"), "utf8");
+      expect(fixedClass).toContain("export default class ExportClass");
+      expect(fixedClass).toContain("static create(): ExportClass");
+      expect(fixedClass).toContain("return new ExportClass()");
+
+      const fixedFunction = await readFile(path.join(cwd, "src/export-function.ts"), "utf8");
+      expect(fixedFunction).toContain("export default function exportFunction()");
+      expect(fixedFunction).toContain("return exportFunction;");
+
+      const fixedBinding = await readFile(path.join(cwd, "src/export-binding.ts"), "utf8");
+      expect(fixedBinding).toContain("const exportBinding = 1;");
+      expect(fixedBinding).toContain("console.log(exportBinding);");
+      expect(fixedBinding).toContain("export default exportBinding;");
+
+      const fixedSpecifier = await readFile(path.join(cwd, "src/export-specifier.ts"), "utf8");
+      expect(fixedSpecifier).toContain("const exportSpecifier = 1;");
+      expect(fixedSpecifier).toContain("console.log(exportSpecifier);");
+      expect(fixedSpecifier).toContain("export { exportSpecifier as default };");
+
+      const conflictRun = await runOxlint({
+        configPath: "default.config.json",
+        cwd,
+        fix: true,
+        targets: ["src/export-conflict.ts"],
+      });
+
+      expect(conflictRun.exitCode, "conflicting export rename should keep reporting").not.toBe(0);
+      const conflictedExport = await readFile(path.join(cwd, "src/export-conflict.ts"), "utf8");
+      expect(conflictedExport).toContain("export default wrongConflict;");
     });
   },
   testTimeoutMs,

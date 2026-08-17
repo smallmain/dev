@@ -42,10 +42,13 @@ SmallMain 使用的开发脚手架。
     <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.06.15</td>
   </tr>
   <tr>
-    <td rowspan="6">Web</td>
+    <td rowspan="2">Specification</td>
   </tr>
   <tr>
-    <td><a href="#web-specification">Specification</a></td><td>2025.08.14</td>
+    <td><a href="#web-specification">Web</a></td><td>2025.08.14</td>
+  </tr>
+  <tr>
+    <td rowspan="5">Web</td>
   </tr>
   <tr>
     <td><a href="#ts-config">TS Config</a></td><td>2025.06.15</td>
@@ -63,14 +66,19 @@ SmallMain 使用的开发脚手架。
     <td rowspan="3">Oxlint Plugin</td>
   </tr>
   <tr>
-    <td><a href="#">comments</a></td><td>2025.06.15</td>
+    <td><a href="#comments">comments</a></td><td>2025.06.15</td>
   </tr>
     <tr>
-    <td><a href="#">consistent-esm-default-name</a></td><td>2025.06.15</td>
+    <td><a href="#consistent-esm-default-name">consistent-esm-default-name</a></td><td>2025.06.15</td>
   </tr>
 </table>
 
 ## CLI
+
+环境要求：
+
+- Node.js 24
+- Git
 
 安装：
 
@@ -121,6 +129,7 @@ npx sm check commit-message .git/COMMIT_EDITMSG      # 检查提交信息文件
 
 ```bash
 npx sm staged-run "npm run check" "."
+npx sm staged-run --update-index "npm run check:fix" "." # 自动修复后重新暂存文件
 ```
 
 该命令将 Git 暂存区文件追加到指定命令后执行。
@@ -133,6 +142,7 @@ npx sm set-git-hook
 
 该命令会安装预设的 Git Hooks：
 
+- 已有 Hook 会被覆盖。
 - `pre-commit`: 使用 `sm staged-run` 对暂存文件执行检查。
 - `commit-msg`: 使用 `sm check commit-message "$1"` 校验提交信息。
 
@@ -140,9 +150,12 @@ npx sm set-git-hook
 
 ### Web Specification
 
-| 路径                  | 说明       |
-| --------------------- | ---------- |
-| `templates/web/specs` | 通用配置。 |
+| 路径                  | 说明                      |
+| --------------------- | ------------------------- |
+| `specs/web/coding.md` | TypeScript 编码规范。     |
+| `specs/web/ecc.md`    | ECMAScript 条件常量规范。 |
+| `specs/web/esp.md`    | ECMAScript 包规范。       |
+| `specs/web/jds.md`    | JSDoc 规范。              |
 
 ## Editor Config
 
@@ -169,12 +182,12 @@ npm i -D @smallmains/dev
 }
 ```
 
-| 路径                              | 说明                                          |
-| --------------------------------- | --------------------------------------------- |
-| `@smallmains/dev/ts/base.json`    | 基础配置。                                    |
-| `@smallmains/dev/ts/generic.json` | 中立运行环境、使用 NodeNext 模块规范的配置。  |
-| `@smallmains/dev/ts/browser.json` | 浏览器运行环境、使用 Bundler 模块解析的配置。 |
-| `@smallmains/dev/ts/nodejs.json`  | Node.js 项目配置。                            |
+| 路径                              | 说明                                               |
+| --------------------------------- | -------------------------------------------------- |
+| `@smallmains/dev/ts/base.json`    | 基础配置。                                         |
+| `@smallmains/dev/ts/generic.json` | 中立运行环境、使用 `preserve` 模块规范的配置。     |
+| `@smallmains/dev/ts/browser.json` | 浏览器运行环境、使用 `esnext` 模块规范的配置。     |
+| `@smallmains/dev/ts/nodejs.json`  | Node.js 运行环境、使用 `nodenext` 模块规范的配置。 |
 
 ## VS Code Config
 
@@ -209,6 +222,7 @@ export default defineConfig({
 - `default`: 通用配置。
 - `vitest`: 适用于使用 Vitest 的项目的配置。
 - `react`: 适用于使用 React 的项目的配置。
+- `nextjs`: 适用于使用 Next.js 的项目的配置。
 - `nodejs`: 适用于使用 Node.js 的项目的配置。
 - `security`: 适用于注重安全性的项目的配置。
 
@@ -247,9 +261,11 @@ npm i -D @smallmains/dev
 `stylelint.config.ts`
 
 ```ts
-{
-  "extends": "@smallmains/dev/stylelint/generic.js",
-}
+import type { Config } from "stylelint";
+
+export default {
+  extends: "@smallmains/dev/stylelint/generic.js",
+} satisfies Config;
 ```
 
 | 路径                                       | 说明                       |
@@ -291,9 +307,9 @@ export default defineConfig({
 
 #### require-description
 
-| 选项     | 类型       | 默认值 | 说明           |
-| -------- | ---------- | ------ | -------------- |
-| `ignore` | `string[]` | `[]`   | 忽略某些注释。 |
+| 选项     | 类型       | 默认值 | 说明                             |
+| -------- | ---------- | ------ | -------------------------------- |
+| `ignore` | `string[]` | `[]`   | 忽略指定的 Oxlint 内联忽略注释。 |
 
 允许的值：
 
@@ -302,19 +318,17 @@ export default defineConfig({
 "oxlint-enable"
 "oxlint-disable-line"
 "oxlint-disable-next-line"
-"eslint-disable"
-"eslint-enable"
-"eslint-disable-line"
-"eslint-disable-next-line"
 ```
 
 ### consistent-esm-default-name
 
 - 仅支持 ESM，不检查 CommonJS 等其它模块系统。
-- 优先解析导入目标模块的导出符号名称，解析不到时再按模块路径生成合法标识符。
+- `default-import-name` 优先使用导入目标模块的具名默认导出名称，无法取得名称时才按模块路径生成合法标识符。
 - 按父目录名推导 `index` 目录导入，例如 `./Button/index` 对应 `Button`。
 - 目录导入会首先考虑目录本身的 `package.json#name`，否则使用目录名。
-- 匿名导出、字面量导出、对象导出和调用表达式导出会被忽略。
+- `default-export-name` 根据当前文件路径和模板检查具名默认导出的名称。
+- 两条规则都会在可安全重命名绑定及其全部引用时自动修复。
+- `default-export-name` 会忽略没有绑定名称的默认导出；这些模块作为导入目标时，`default-import-name` 仍会按模块路径回退。
 
 示例：
 
@@ -347,10 +361,10 @@ export default defineConfig({
 
 规则：
 
-| 规则                                              | 说明                                                          |
-| ------------------------------------------------- | ------------------------------------------------------------- |
-| `consistent-esm-default-name/default-import-name` | 检查类似 `import Foo from "./foo"` 的默认导入名是否符合规范。 |
-| `consistent-esm-default-name/default-export-name` | 检查类似 `export default Foo` 的默认导出名是否符合规范。      |
+| 规则                                              | 说明                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------ |
+| `consistent-esm-default-name/default-import-name` | 检查默认导入的本地绑定名称，并在安全时自动修复。             |
+| `consistent-esm-default-name/default-export-name` | 根据当前文件路径检查具名默认导出的名称，并在安全时自动修复。 |
 
 #### 设置
 
@@ -405,7 +419,7 @@ export default function generatedClient() {}
 
 **template**
 
-- 说明：当无法从导入目标模块解析出导出符号名称时，按模板从导入路径推导名称；按数组顺序匹配，第一条命中生效。
+- 说明：`default-import-name` 无法从导入目标模块取得具名默认导出名称时，按模板从导入路径推导名称；`default-export-name` 根据当前文件路径和模板推导期望名称。模板按数组顺序匹配，第一条命中生效。
 - 类型：`TemplateEntry[]`
 - 默认值：
 
@@ -439,19 +453,21 @@ TypeScript 算法：
    - `button.tsx` -> `button`
    - `user.service.ts` -> `user.service`
 
-3. 把不能出现在标识符里的字符当作分隔符移除，并把后一个合法字符大写
+3. 如果首字符不能作为标识符开头，会先添加 `_`
+   - `123abc` -> `_123abc`
+
+4. 把不能作为标识符一部分的字符当作分隔符移除，并把后一个合法字符大写
    - `foo-bar` -> `fooBar`
    - `foo.bar` -> `fooBar`
    - `foo bar` -> `fooBar`
 
-4. 能作为标识符一部分的字符会保留
+5. 能作为标识符一部分的字符会保留
    - `foo_bar` -> `foo_bar`
    - `$foo` -> `$foo`
    - `_foo` -> `_foo`
 
-5. 如果结果为空或是保留字，会补 `_`
+6. 如果结果为空，会回退为 `_`；如果结果是保留字，会添加 `_` 前缀
    - `class` -> `_class`
-   - `123abc` -> `abc` 或在无法得到合法开头时回退 `_`
 
 示例：
 
@@ -504,7 +520,7 @@ import userService from "./user-service"; // fallback camel
 export default class UserService {}
 ```
 
-匿名导出、字面量导出、对象导出和调用表达式导出会被忽略：
+以下没有绑定名称的默认导出会被 `default-export-name` 忽略；作为导入目标时，`default-import-name` 会按模块路径和 `template` 回退：
 
 ```ts
 export default { ok: true };

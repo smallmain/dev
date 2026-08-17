@@ -103,9 +103,8 @@ async function main(): Promise<void> {
 
   program
     .command("set-git-hook")
-    .description("Install the sm pre-commit Git hook.")
-    .option("--force", "Overwrite an existing non-sm pre-commit hook.")
-    .action((options: { force?: boolean }) => runSetGitHookCommand(options));
+    .description("Install the preset Git hooks.")
+    .action(() => runSetGitHookCommand());
 
   await program.parseAsync();
 }

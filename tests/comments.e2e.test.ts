@@ -59,7 +59,7 @@ async function writeConfig(
 }
 
 test(
-  "reports oxlint and eslint directive comments without a description",
+  "reports oxlint directive comments without a description",
   async () => {
     await withCommentsFixture(async ({ cwd }) => {
       await writeConfig(cwd, "oxlint.config.json");
@@ -70,8 +70,6 @@ test(
           "/* oxlint-disable no-console */",
           "// oxlint-disable-next-line no-console",
           "export const first = 1;",
-          "// eslint-disable-line no-alert",
-          "export const second = 2;",
           "",
         ].join("\n"),
       );
@@ -101,8 +99,6 @@ test(
           "/* oxlint-disable no-console -- console needed for the demo */",
           "// oxlint-disable-next-line no-console -- keep temporary logging",
           "export const first = 1;",
-          "// eslint-disable-next-line no-alert -- legacy alert kept intentionally",
-          "export const second = 2;",
           "",
         ].join("\n"),
       );
@@ -111,6 +107,34 @@ test(
         configPath: "oxlint.config.json",
         cwd,
         targets: ["src/described.ts"],
+      });
+
+      expect(run.exitCode, run.stdout || run.stderr).toBe(0);
+    });
+  },
+  testTimeoutMs,
+);
+
+test(
+  "ignores eslint directive comments",
+  async () => {
+    await withCommentsFixture(async ({ cwd }) => {
+      await writeConfig(cwd, "oxlint.config.json");
+      await writeFixture(
+        cwd,
+        "src/eslint.ts",
+        [
+          "/* eslint-disable no-console */",
+          "// eslint-disable-next-line no-console",
+          "export const value = 1;",
+          "",
+        ].join("\n"),
+      );
+
+      const run = await runOxlint({
+        configPath: "oxlint.config.json",
+        cwd,
+        targets: ["src/eslint.ts"],
       });
 
       expect(run.exitCode, run.stdout || run.stderr).toBe(0);

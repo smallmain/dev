@@ -1,5 +1,5 @@
 import { defineConfig } from "oxlint";
-import { scriptExtGlob, testSuffixGlob } from "../shared.js";
+import { scriptExtGlob, testSuffixGlob } from "../../shared/file-extension.js";
 
 export default defineConfig({
   overrides: [

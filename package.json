@@ -27,6 +27,7 @@
     "index.js",
     "oxfmt",
     "oxlint",
+    "shared",
     "stylelint",
     "templates",
     "ts",

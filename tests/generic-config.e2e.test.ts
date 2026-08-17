@@ -42,6 +42,12 @@ async function writeFixture(cwd: string, relativePath: string, contents: string)
   await writeFile(filePath, contents);
 }
 
+test("the generic entry point exports the Next.js configuration", async () => {
+  const genericModule = await import(genericSpecifier);
+
+  expect(genericModule.nextjs).toBeDefined();
+});
+
 test(
   "extending the generic config loads its bundled JS plugins",
   async () => {

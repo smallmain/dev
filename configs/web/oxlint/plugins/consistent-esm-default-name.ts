@@ -29,18 +29,7 @@ const RESOLVE_OPTIONS = {
     ".jsx": [".tsx", ".jsx"],
     ".mjs": [".mts", ".mjs"],
   },
-  extensions: [
-    ".ts",
-    ".tsx",
-    ".mts",
-    ".cts",
-    ".d.ts",
-    ".js",
-    ".jsx",
-    ".mjs",
-    ".cjs",
-    ".json",
-  ],
+  extensions: [".ts", ".tsx", ".mts", ".cts", ".d.ts", ".js", ".jsx", ".mjs", ".cjs", ".json"],
   mainFields: ["types", "typings", "module", "jsnext:main", "main"],
   mainFiles: ["index"],
   moduleType: true,
@@ -194,6 +183,11 @@ type Reference = {
   resolved?: Variable | null;
 };
 
+type Scope = {
+  references?: readonly Reference[];
+  variables?: readonly Variable[];
+};
+
 type Variable = {
   identifiers?: readonly IdentifierNode[];
   name?: string;
@@ -205,6 +199,9 @@ type SourceCode = {
     tokens?: readonly TokenNode[];
   };
   getDeclaredVariables?: (node: unknown) => Variable[];
+  scopeManager?: {
+    scopes?: readonly Scope[];
+  };
   text?: string;
 };
 
@@ -242,6 +239,12 @@ type ImportTarget = DerivedNameInput & {
   path: string | null;
 };
 
+type ExportNameInfo = {
+  actualName: string;
+  declaration?: AstNode;
+  identifier?: IdentifierNode;
+};
+
 type FsModule = {
   lstatSync: (filePath: string) => { isDirectory: () => boolean; isFile: () => boolean };
   readFileSync: (filePath: string, encoding: "utf8") => string;
@@ -274,7 +277,11 @@ function getFilename(context: RuleContext): string | null {
 }
 
 function isTemplateEntry(value: unknown): value is TemplateEntry {
-  return typeof value === "object" && value !== null && typeof (value as TemplateEntry).match === "string";
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as TemplateEntry).match === "string"
+  );
 }
 
 function getPluginSettings(context: RuleContext): PluginSettings {
@@ -291,7 +298,9 @@ function getPluginSettings(context: RuleContext): PluginSettings {
     ignoreSpecifiers: Array.isArray(candidate.ignoreSpecifiers)
       ? candidate.ignoreSpecifiers.filter((value): value is string => typeof value === "string")
       : undefined,
-    template: Array.isArray(candidate.template) ? candidate.template.filter(isTemplateEntry) : undefined,
+    template: Array.isArray(candidate.template)
+      ? candidate.template.filter(isTemplateEntry)
+      : undefined,
   };
 }
 
@@ -304,7 +313,7 @@ function compileRegex(pattern: string): RegExp | null {
 }
 
 function isIgnoredSpecifier(specifier: string, patterns: readonly string[]): boolean {
-  return patterns.some((pattern) => compileRegex(pattern)?.test(specifier) ?? false);
+  return patterns.some(pattern => compileRegex(pattern)?.test(specifier) ?? false);
 }
 
 function splitSpecifierPath(specifier: string): string {
@@ -439,7 +448,11 @@ function matchesGlob(value: string, pattern: string): boolean {
   return new RegExp(`^${escapedPattern}$`, "u").test(value);
 }
 
-function isIgnoredPath(filePath: string | null, patterns: readonly string[] | undefined, context: RuleContext): boolean {
+function isIgnoredPath(
+  filePath: string | null,
+  patterns: readonly string[] | undefined,
+  context: RuleContext,
+): boolean {
   if (!filePath || !patterns || patterns.length === 0) {
     return false;
   }
@@ -447,7 +460,9 @@ function isIgnoredPath(filePath: string | null, patterns: readonly string[] | un
   const normalizedPath = normalizePathSeparators(filePath);
   const relativeToCwd = relativePath(getCwd(context), normalizedPath);
 
-  return patterns.some(pattern => matchesGlob(normalizedPath, pattern) || matchesGlob(relativeToCwd, pattern));
+  return patterns.some(
+    pattern => matchesGlob(normalizedPath, pattern) || matchesGlob(relativeToCwd, pattern),
+  );
 }
 
 function getFs(): FsModule | undefined {
@@ -463,7 +478,7 @@ function readJsonFile(filePath: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
 
-    return typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
+    return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
   } catch {
     return null;
   }
@@ -579,10 +594,18 @@ function isIdentifierPartChar(char: string): boolean {
   return /^[$_\u200c\u200d\p{ID_Continue}]$/u.test(char);
 }
 
-function moduleSpecifierToTypeScriptIdentifier(moduleSpecifier: string, forceCapitalize = false): string {
+function moduleSpecifierToTypeScriptIdentifier(
+  moduleSpecifier: string,
+  forceCapitalize = false,
+): string {
   const withoutExtension = basenameWithoutExtension(moduleSpecifier);
-  const baseName = basename(withoutExtension.endsWith("/index") ? withoutExtension.slice(0, -"/index".length) : withoutExtension);
-  let result = "";
+  const baseName = basename(
+    withoutExtension.endsWith("/index")
+      ? withoutExtension.slice(0, -"/index".length)
+      : withoutExtension,
+  );
+  const [firstChar] = baseName;
+  let result = firstChar && !isIdentifierStartChar(firstChar) ? "_" : "";
   let lastCharWasValid = true;
 
   for (const char of baseName) {
@@ -649,7 +672,7 @@ function formatName(value: string, format: FormatName = "preserve"): string {
 }
 
 function applyStripPatterns(value: string, strip: TemplateEntry["strip"]): string {
-  const patterns = typeof strip === "string" ? [strip] : strip ?? [];
+  const patterns = typeof strip === "string" ? [strip] : (strip ?? []);
 
   return patterns.reduce((current, pattern) => {
     const regex = compileRegex(pattern);
@@ -735,72 +758,188 @@ function rangeTextMatches(sourceCode: SourceCode, range: Range, name: string): b
   return !sourceCode.text || sourceCode.text.slice(range[0], range[1]) === name;
 }
 
-function getSafeRenameRanges(
+function identifiersMatch(left: IdentifierNode | undefined, right: IdentifierNode): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  const leftRange = getNodeRange(left);
+  const rightRange = getNodeRange(right);
+
+  return Boolean(
+    leftRange && rightRange && leftRange[0] === rightRange[0] && leftRange[1] === rightRange[1],
+  );
+}
+
+function getDeclaredBindingVariables(
+  sourceCode: SourceCode,
+  declaration: unknown,
+  identifier: IdentifierNode,
+  actualName: string,
+): Variable[] {
+  return (sourceCode.getDeclaredVariables?.(declaration) ?? []).filter(
+    variable =>
+      variable.name === actualName &&
+      (variable.identifiers ?? []).some(candidate => identifiersMatch(candidate, identifier)),
+  );
+}
+
+function getReferencedBindingVariable(
+  sourceCode: SourceCode,
+  identifier: IdentifierNode,
+  actualName: string,
+): Variable | null {
+  const variables = new Set<Variable>();
+
+  for (const scope of sourceCode.scopeManager?.scopes ?? []) {
+    for (const reference of scope.references ?? []) {
+      if (
+        identifiersMatch(reference.identifier, identifier) &&
+        reference.resolved?.name === actualName
+      ) {
+        variables.add(reference.resolved);
+      }
+    }
+  }
+
+  return variables.size === 1 ? [...variables][0] : null;
+}
+
+function expandBindingVariables(
+  sourceCode: SourceCode,
+  initialVariables: readonly Variable[],
+  actualName: string,
+): Variable[] {
+  const identifierRanges = new Set(
+    initialVariables
+      .flatMap(variable => variable.identifiers ?? [])
+      .map(getNodeRange)
+      .filter((range): range is Range => range !== null)
+      .map(rangeKey),
+  );
+  const variables = new Set(initialVariables);
+
+  for (const scope of sourceCode.scopeManager?.scopes ?? []) {
+    for (const variable of scope.variables ?? []) {
+      if (
+        variable.name === actualName &&
+        (variable.identifiers ?? []).some(identifier => {
+          const range = getNodeRange(identifier);
+
+          return range ? identifierRanges.has(rangeKey(range)) : false;
+        })
+      ) {
+        variables.add(variable);
+      }
+    }
+  }
+
+  return [...variables];
+}
+
+function getSafeBindingRenameRanges(
   sourceCode: SourceCode | undefined,
-  specifier: ImportDefaultSpecifierNode,
+  initialVariables: readonly Variable[],
   actualName: string,
   expectedName: string,
 ): Range[] | null {
   if (
     !sourceCode ||
-    !sourceCode.getDeclaredVariables ||
+    initialVariables.length === 0 ||
     !isValidBindingIdentifier(expectedName) ||
     hasIdentifierConflict(sourceCode, expectedName)
   ) {
     return null;
   }
 
-  const variables = sourceCode.getDeclaredVariables(specifier);
-  if (variables.length !== 1) {
-    return null;
-  }
-
-  const variable = variables[0];
-  if (!variable || variable.name !== actualName || !Array.isArray(variable.references)) {
-    return null;
-  }
-
+  const variables = expandBindingVariables(sourceCode, initialVariables, actualName);
+  const variableSet = new Set(variables);
   const ranges = new Map<string, Range>();
-  for (const identifier of variable.identifiers ?? []) {
-    if (getIdentifierName(identifier) !== actualName) {
+
+  for (const variable of variables) {
+    if (variable.name !== actualName || !Array.isArray(variable.references)) {
       return null;
     }
 
-    const range = getNodeRange(identifier);
-    if (!range || !rangeTextMatches(sourceCode, range, actualName)) {
-      return null;
+    for (const identifier of variable.identifiers ?? []) {
+      if (getIdentifierName(identifier) !== actualName) {
+        return null;
+      }
+
+      const range = getNodeRange(identifier);
+      if (!range || !rangeTextMatches(sourceCode, range, actualName)) {
+        return null;
+      }
+
+      ranges.set(rangeKey(range), range);
     }
 
-    ranges.set(rangeKey(range), range);
-  }
+    for (const reference of variable.references) {
+      if (reference.resolved && !variableSet.has(reference.resolved)) {
+        return null;
+      }
 
-  for (const reference of variable.references) {
-    if (reference.resolved && reference.resolved !== variable) {
-      return null;
+      const identifier = reference.identifier;
+      if (getIdentifierName(identifier) !== actualName) {
+        return null;
+      }
+
+      const range = getNodeRange(identifier);
+      if (!range || !rangeTextMatches(sourceCode, range, actualName)) {
+        return null;
+      }
+
+      ranges.set(rangeKey(range), range);
     }
-
-    const identifier = reference.identifier;
-    if (getIdentifierName(identifier) !== actualName) {
-      return null;
-    }
-
-    const range = getNodeRange(identifier);
-    if (!range || !rangeTextMatches(sourceCode, range, actualName)) {
-      return null;
-    }
-
-    ranges.set(rangeKey(range), range);
   }
 
   return ranges.size > 0 ? [...ranges.values()] : null;
 }
 
-function getDefaultImportSpecifier(
-  node: ImportDeclarationNode,
-): ImportDefaultSpecifierNode | null {
-  return (
-    node.specifiers?.find(specifier => specifier.type === "ImportDefaultSpecifier") ?? null
+function getSafeImportRenameRanges(
+  sourceCode: SourceCode | undefined,
+  specifier: ImportDefaultSpecifierNode,
+  actualName: string,
+  expectedName: string,
+): Range[] | null {
+  const identifier = specifier.local;
+  if (!sourceCode || !identifier) {
+    return null;
+  }
+
+  return getSafeBindingRenameRanges(
+    sourceCode,
+    getDeclaredBindingVariables(sourceCode, specifier, identifier, actualName),
+    actualName,
+    expectedName,
   );
+}
+
+function getSafeExportRenameRanges(
+  sourceCode: SourceCode | undefined,
+  exportInfo: ExportNameInfo,
+  expectedName: string,
+): Range[] | null {
+  if (!sourceCode || !exportInfo.identifier) {
+    return null;
+  }
+
+  const variables = exportInfo.declaration
+    ? getDeclaredBindingVariables(
+        sourceCode,
+        exportInfo.declaration,
+        exportInfo.identifier,
+        exportInfo.actualName,
+      )
+    : [
+        getReferencedBindingVariable(sourceCode, exportInfo.identifier, exportInfo.actualName),
+      ].filter((variable): variable is Variable => variable !== null);
+
+  return getSafeBindingRenameRanges(sourceCode, variables, exportInfo.actualName, expectedName);
+}
+
+function getDefaultImportSpecifier(node: ImportDeclarationNode): ImportDefaultSpecifierNode | null {
+  return node.specifiers?.find(specifier => specifier.type === "ImportDefaultSpecifier") ?? null;
 }
 
 function unwrapExpression(node: AstNode | undefined): AstNode | undefined {
@@ -821,24 +960,32 @@ function unwrapExpression(node: AstNode | undefined): AstNode | undefined {
   return current;
 }
 
-function getExportedDeclarationName(node: AstNode | undefined): string | null {
+function getExportedDeclarationInfo(node: AstNode | undefined): ExportNameInfo | null {
   const declaration = unwrapExpression(node);
   if (!declaration) {
     return null;
   }
 
   if (declaration.type === "Identifier") {
-    return getIdentifierName(declaration);
+    const actualName = getIdentifierName(declaration);
+
+    return actualName ? { actualName, identifier: declaration } : null;
   }
 
   if (
     (declaration.type === "FunctionDeclaration" || declaration.type === "ClassDeclaration") &&
     declaration.id
   ) {
-    return getIdentifierName(declaration.id);
+    const actualName = getIdentifierName(declaration.id);
+
+    return actualName ? { actualName, declaration, identifier: declaration.id } : null;
   }
 
   return null;
+}
+
+function getExportedDeclarationName(node: AstNode | undefined): string | null {
+  return getExportedDeclarationInfo(node)?.actualName ?? null;
 }
 
 function isDefaultExportName(node: unknown): boolean {
@@ -851,18 +998,29 @@ function getLocalExportName(node: unknown): string | null {
   return getIdentifierName(node) ?? (typeof literalValue === "string" ? literalValue : null);
 }
 
-function getNamedDefaultExportName(node: AstNode): string | null {
+function getNamedDefaultExportInfo(node: AstNode): ExportNameInfo | null {
   if (node.source) {
     return null;
   }
 
   for (const specifier of node.specifiers ?? []) {
     if (isDefaultExportName(specifier.exported)) {
-      return getLocalExportName(specifier.local);
+      const actualName = getLocalExportName(specifier.local);
+
+      return actualName
+        ? {
+            actualName,
+            ...(isIdentifierNode(specifier.local) ? { identifier: specifier.local } : {}),
+          }
+        : null;
     }
   }
 
   return null;
+}
+
+function getNamedDefaultExportName(node: AstNode): string | null {
+  return getNamedDefaultExportInfo(node)?.actualName ?? null;
 }
 
 function isDefaultExportEntry(entry: StaticExportEntry): boolean {
@@ -1037,7 +1195,11 @@ const defaultImportNameRule = {
         const template = getTemplateEntries(settings);
         const filename = getFilename(context);
         const specifier = node.source?.value;
-        if (!filename || typeof specifier !== "string" || isIgnoredSpecifier(specifier, ignoredSpecifiers)) {
+        if (
+          !filename ||
+          typeof specifier !== "string" ||
+          isIgnoredSpecifier(specifier, ignoredSpecifiers)
+        ) {
           return;
         }
 
@@ -1066,7 +1228,7 @@ const defaultImportNameRule = {
             specifier,
           },
           fix(fixer) {
-            const ranges = getSafeRenameRanges(
+            const ranges = getSafeImportRenameRanges(
               getSourceCode(context),
               defaultImport,
               actualName,
@@ -1088,6 +1250,7 @@ const defaultExportNameRule = {
       description: "enforce default export names matching TypeScript fallback module names",
       recommended: false,
     },
+    fixable: "code",
     messages: {
       unexpected:
         "Default export name '{{actualName}}' should be '{{expectedName}}' for this file.",
@@ -1109,20 +1272,29 @@ const defaultExportNameRule = {
         const expectedName = getExpectedName(deriveExportNameInput(filename), template);
 
         for (const statement of node.body ?? []) {
-          const actualName =
+          const exportInfo =
             statement.type === "ExportDefaultDeclaration"
-              ? getExportedDeclarationName(statement.declaration)
+              ? getExportedDeclarationInfo(statement.declaration)
               : statement.type === "ExportNamedDeclaration"
-                ? getNamedDefaultExportName(statement)
+                ? getNamedDefaultExportInfo(statement)
                 : null;
 
-          if (actualName && actualName !== expectedName) {
+          if (exportInfo && exportInfo.actualName !== expectedName) {
             context.report({
               node: statement,
               messageId: "unexpected",
               data: {
-                actualName,
+                actualName: exportInfo.actualName,
                 expectedName,
+              },
+              fix(fixer) {
+                const ranges = getSafeExportRenameRanges(
+                  getSourceCode(context),
+                  exportInfo,
+                  expectedName,
+                );
+
+                return ranges?.map(range => fixer.replaceTextRange(range, expectedName)) ?? null;
               },
             });
           }
@@ -1132,14 +1304,16 @@ const defaultExportNameRule = {
   },
 };
 
-const plugin = eslintCompatPlugin(definePlugin({
-  meta: {
-    name: PLUGIN_NAME,
-  },
-  rules: {
-    "default-import-name": defaultImportNameRule,
-    "default-export-name": defaultExportNameRule,
-  },
-} as Plugin));
+const plugin = eslintCompatPlugin(
+  definePlugin({
+    meta: {
+      name: PLUGIN_NAME,
+    },
+    rules: {
+      "default-import-name": defaultImportNameRule,
+      "default-export-name": defaultExportNameRule,
+    },
+  } as Plugin),
+);
 
 export default plugin;

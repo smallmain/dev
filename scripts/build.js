@@ -13,11 +13,7 @@ const copiedSourceDirs = [
   ["templates", "templates"],
 ];
 
-const typescriptSourceDirs = [
-  ["configs/web/oxlint", "oxlint"],
-  ["configs/web/oxfmt", "oxfmt"],
-  ["configs/web/stylelint", "stylelint"],
-];
+const typescriptSourceDirs = [["configs/web", "."]];
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));

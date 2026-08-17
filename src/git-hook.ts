@@ -2,10 +2,6 @@ import { access, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readCommandOutput, runCommand } from "./command-utils.ts";
 
-interface RawSetGitHookOptions {
-  force?: boolean;
-}
-
 const managedPreCommitMarker = "# sm managed pre-commit hook";
 const managedCommitMessageMarker = "# sm managed commit-msg hook";
 const commitMessageHookContent = `#!/bin/sh
@@ -14,7 +10,7 @@ PATH="$(git rev-parse --show-toplevel)/node_modules/.bin:$PATH"
 sm check commit-message "$1"
 `;
 
-export async function runSetGitHookCommand(options: RawSetGitHookOptions): Promise<void> {
+export async function runSetGitHookCommand(): Promise<void> {
   if (!(await hasLocalGitDirectory())) {
     console.log("Skipping Git hook installation because .git is not in the current directory.");
     return;
@@ -28,51 +24,29 @@ export async function runSetGitHookCommand(options: RawSetGitHookOptions): Promi
   }
 
   const hooksPath = await getHooksPath();
-
-  if (hooksPath && !isHuskyHooksPath(hooksPath) && options.force !== true) {
-    throw new Error("Git core.hooksPath is set. Re-run with --force to use .git/hooks.");
-  }
-
   const packageManager = await resolvePackageManager();
 
   await writeManagedHook({
     content: createPreCommitHookContent(packageManager),
-    force: options.force === true,
     gitDir,
-    marker: managedPreCommitMarker,
     name: "pre-commit",
   });
   await writeManagedHook({
     content: commitMessageHookContent,
-    force: options.force === true,
     gitDir,
-    marker: managedCommitMessageMarker,
     name: "commit-msg",
   });
-  await resetHooksPath(hooksPath, options.force === true);
+  await resetHooksPath(hooksPath);
   console.log(`Installed ${path.join(gitDir, "hooks", "pre-commit")}`);
   console.log(`Installed ${path.join(gitDir, "hooks", "commit-msg")}`);
 }
 
 async function writeManagedHook(options: {
   content: string;
-  force: boolean;
   gitDir: string;
-  marker: string;
   name: string;
 }): Promise<void> {
   const hookPath = path.join(options.gitDir, "hooks", options.name);
-  const existingContent = await readOptionalFile(hookPath);
-
-  if (
-    existingContent !== undefined &&
-    !existingContent.includes(options.marker) &&
-    !options.force
-  ) {
-    throw new Error(
-      `Existing ${options.name} hook is not managed by sm. Re-run with --force to overwrite it.`,
-    );
-  }
 
   await mkdir(path.dirname(hookPath), { recursive: true });
   await writeFile(hookPath, options.content);
@@ -116,8 +90,8 @@ async function getHooksPath(): Promise<string | undefined> {
   }
 }
 
-async function resetHooksPath(hooksPath: string | undefined, force: boolean): Promise<void> {
-  if (hooksPath && (isHuskyHooksPath(hooksPath) || force)) {
+async function resetHooksPath(hooksPath: string | undefined): Promise<void> {
+  if (hooksPath) {
     await runCommand("git", ["config", "--unset", "core.hooksPath"], { stdio: "ignore" });
   }
 }
@@ -169,12 +143,6 @@ function getPackageManagerName(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isHuskyHooksPath(hooksPath: string): boolean {
-  const normalizedHooksPath = hooksPath.replaceAll("\\", "/").replace(/^\.\//u, "");
-
-  return normalizedHooksPath === ".husky" || normalizedHooksPath === ".husky/_";
 }
 
 async function readOptionalFile(filePath: string): Promise<string | undefined> {

@@ -3,10 +3,6 @@ const DIRECTIVE_NAMES = [
   "oxlint-enable",
   "oxlint-disable-line",
   "oxlint-disable-next-line",
-  "eslint-disable",
-  "eslint-enable",
-  "eslint-disable-line",
-  "eslint-disable-next-line",
 ] as const;
 
 type DirectiveName = (typeof DIRECTIVE_NAMES)[number];
@@ -41,7 +37,7 @@ type DirectiveComment = {
 
 const DIRECTIVE_NAME_SET: ReadonlySet<string> = new Set(DIRECTIVE_NAMES);
 const DIRECTIVE_PATTERN =
-  /^(?<directive>(?:oxlint|eslint)-(?:disable-next-line|disable-line|disable|enable))\b(?<body>[\s\S]*)$/u;
+  /^(?<directive>oxlint-(?:disable-next-line|disable-line|disable|enable))\b(?<body>[\s\S]*)$/u;
 const DESCRIPTION_PATTERN = /(?:^|\s)--(?<description>[\s\S]*)$/u;
 
 function isDirectiveName(directive: string): directive is DirectiveName {
@@ -94,7 +90,7 @@ const requireDescriptionRule = {
   meta: {
     type: "suggestion",
     docs: {
-      description: "require descriptions in Oxlint and ESLint directive comments",
+      description: "require descriptions in Oxlint directive comments",
       recommended: false,
     },
     messages: {

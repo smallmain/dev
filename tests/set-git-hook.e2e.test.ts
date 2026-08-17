@@ -102,58 +102,68 @@ test(
 );
 
 test(
-  "refuses to overwrite an unmanaged hook without --force and overwrites with it",
+  "overwrites unmanaged hooks by default",
   async () => {
     await withGitRepo(async ({ cwd, env }) => {
       await writeFile(path.join(cwd, ".git/hooks/pre-commit"), "#!/bin/sh\necho custom\n");
+      await writeFile(path.join(cwd, ".git/hooks/commit-msg"), "#!/bin/sh\necho custom\n");
 
-      const refused = await runSm(["set-git-hook"], { cwd, env });
+      const result = await runSm(["set-git-hook"], { cwd, env });
 
-      expect(refused.exitCode).not.toBe(0);
-      expect(refused.stderr).toContain("Existing pre-commit hook is not managed by sm.");
-
-      const forced = await runSm(["set-git-hook", "--force"], { cwd, env });
-
-      expect(forced, formatCommandFailure("sm set-git-hook --force", forced)).toMatchObject({
+      expect(result, formatCommandFailure("sm set-git-hook", result)).toMatchObject({
         exitCode: 0,
         timedOut: false,
       });
 
       const preCommit = await readFile(path.join(cwd, ".git/hooks/pre-commit"), "utf8");
+      const commitMsg = await readFile(path.join(cwd, ".git/hooks/commit-msg"), "utf8");
 
       expect(preCommit).toContain("# sm managed pre-commit hook");
+      expect(commitMsg).toContain("# sm managed commit-msg hook");
+      expect(preCommit).not.toContain("echo custom");
+      expect(commitMsg).not.toContain("echo custom");
     });
   },
   testTimeoutMs,
 );
 
 test(
-  "errors when core.hooksPath is set but installs for husky paths",
+  "unsets core.hooksPath and installs hooks",
   async () => {
-    await withGitRepo(async fixture => {
-      await setHooksPath(fixture, ".config/hooks");
+    for (const hooksPath of [".config/hooks", ".husky"]) {
+      await withGitRepo(async fixture => {
+        await setHooksPath(fixture, hooksPath);
 
-      const refused = await runSm(["set-git-hook"], { cwd: fixture.cwd, env: fixture.env });
+        const result = await runSm(["set-git-hook"], { cwd: fixture.cwd, env: fixture.env });
 
-      expect(refused.exitCode).not.toBe(0);
-      expect(refused.stderr).toContain(
-        "Git core.hooksPath is set. Re-run with --force to use .git/hooks.",
-      );
-    });
+        expect(result, formatCommandFailure(`sm set-git-hook ${hooksPath}`, result)).toMatchObject({
+          exitCode: 0,
+          timedOut: false,
+        });
 
-    await withGitRepo(async fixture => {
-      await setHooksPath(fixture, ".husky");
+        const configuredHooksPath = await runCommand("git", ["config", "--get", "core.hooksPath"], {
+          cwd: fixture.cwd,
+          env: fixture.env,
+          timeoutMs: testTimeoutMs,
+        });
+        const preCommit = await readFile(path.join(fixture.cwd, ".git/hooks/pre-commit"), "utf8");
 
-      const result = await runSm(["set-git-hook"], { cwd: fixture.cwd, env: fixture.env });
-
-      expect(result, formatCommandFailure("sm set-git-hook husky", result)).toMatchObject({
-        exitCode: 0,
-        timedOut: false,
+        expect(configuredHooksPath.exitCode).not.toBe(0);
+        expect(preCommit).toContain("# sm managed pre-commit hook");
       });
+    }
+  },
+  testTimeoutMs,
+);
 
-      const preCommit = await readFile(path.join(fixture.cwd, ".git/hooks/pre-commit"), "utf8");
+test(
+  "rejects the removed --force option",
+  async () => {
+    await withGitRepo(async ({ cwd, env }) => {
+      const result = await runSm(["set-git-hook", "--force"], { cwd, env });
 
-      expect(preCommit).toContain("# sm managed pre-commit hook");
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("unknown option '--force'");
     });
   },
   testTimeoutMs,
