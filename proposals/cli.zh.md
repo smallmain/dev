@@ -53,6 +53,9 @@
 
 - 指定 `--yes` 或在非交互终端运行时，使用命令行参数和默认值，不展示 TUI。
 - 目标目录固定为当前工作目录；不会清空目录，但会覆盖同名的模板文件和生成文件。
+- 原样复制 `configs/common/.editorconfig`。
+- 渲染包内的模板文件，每个模板文件以 `.ejs` 结尾，输出路径仅移除最后一个 `.ejs` 后缀；发现其它类型的文件时创建失败。
+- 解析每个渲染后的 JSON 文件，并统一为两空格缩进和末尾换行；渲染结果不是有效 JSON 时创建失败。
 - 当前目录不在 Git 工作树中时，执行 `git init`。
 - 根据 `Runtime`、`Components` 和 `CSS` 生成配置及依赖；Vitest 始终启用。
 - 使用选定的包管理器安装依赖。
@@ -60,9 +63,11 @@
 
 生成结果：
 
-- 始终生成基础项目文件、TypeScript、Oxlint、Oxfmt、Vitest 和 VS Code 配置；选择 `CSS` 时额外生成 Stylelint 配置。
-- `package.json` 始终包含 `check`、`check:fix` 和 `test` 脚本；选择 `Git Hook` 时额外生成 `prepare` 脚本。
-- 开发依赖始终包含 `@smallmains/dev`、TypeScript、Oxlint、Oxfmt、oxlint-tsgolint 和 Vitest；`Node.js` 运行时增加 `@types/node`，选择 `CSS` 时增加 Stylelint。
+- 始终生成基础项目文件、TypeScript 源码示例、与源码同目录的单元测试、`tests` 目录中的集成测试，以及 TypeScript、Oxlint、Oxfmt、Vitest 和 VS Code 配置；选择 `CSS` 时额外生成 Stylelint 配置。
+- VS Code `settings.json` 始终配置 Oxc 格式化，仅在选择 `CSS` 时增加 `stylelint.validate`；`extensions.json` 始终推荐 EditorConfig、Oxc 和 Vitest，并在选择 `CSS` 时额外推荐 Stylelint。
+- `package.json` 始终导出 `./src/index.ts`，并包含 `check`、`check:fix` 和 `test` 脚本；选择 `Git Hook` 时额外生成 `prepare` 脚本。
+- 开发依赖始终包含 `@smallmains/dev`、TypeScript、Oxlint、Oxfmt、oxlint-tsgolint、Vitest 及其 V8 覆盖率 provider；`Node.js` 运行时增加 `@types/node`，选择 `CSS` 时增加 Stylelint。
+- 单元测试直接导入源码模块，集成测试则通过生成的包名导入。
 - `Runtime` 决定 TypeScript 配置和运行环境相关的 Oxlint 配置；`React` 与 `Security` 组件增加对应的 Oxlint 配置。
 - `CSS` 类型决定使用通用、CSS Modules 或 Tailwind Stylelint 配置。
 
@@ -76,6 +81,7 @@
 - Oxlint、Stylelint、Oxfmt 按顺序执行；某个工具失败不会阻止后续工具执行，任一工具失败都会使命令失败。
 - 指定文件时，Oxlint 和 Oxfmt 接收全部文件，Stylelint 仅接收其支持的文件类型。
 - 未指定文件时，各工具按自身配置检查项目；Stylelint 使用内置样式文件匹配模式。
+- Stylelint 支持 `.astro`、`.css`、`.ejs`、`.html`、`.less`、`.md`、`.mdx`、`.pcss`、`.sass`、`.scss`、`.svelte` 和 `.vue` 文件。
 
 `check`
 

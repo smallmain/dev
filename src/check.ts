@@ -61,10 +61,13 @@ const oxfmtConfigFiles = [
   ".oxfmtrc.json",
   ".oxfmtrc.jsonc",
 ];
-const stylelintDefaultPatterns = ["**/*.{css,scss,sass,less,pcss,html,vue,svelte,astro,md,mdx}"];
+const stylelintDefaultPatterns = [
+  "**/*.{css,scss,sass,less,pcss,html,ejs,vue,svelte,astro,md,mdx}",
+];
 const stylelintExtensions = new Set([
   ".astro",
   ".css",
+  ".ejs",
   ".html",
   ".less",
   ".md",

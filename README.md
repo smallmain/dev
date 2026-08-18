@@ -33,13 +33,13 @@ Development scaffolding used by SmallMain.
     <td rowspan="4">-</td>
   </tr>
   <tr>
-    <td><a href="#cli">CLI</a></td><td>2026.06.15</td>
+    <td><a href="#cli">CLI</a></td><td>2026.08.18</td>
   </tr>
   <tr>
     <td><a href="#editor-config">Editor Config</a></td><td>EditorConfig Specification v0.17.2; 2026.06.15</td>
   </tr>
     <tr>
-    <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.06.15</td>
+    <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.08.18</td>
   </tr>
   <tr>
     <td rowspan="2">Specification</td>
@@ -191,10 +191,7 @@ Example:
 
 ## VS Code Config
 
-The `.vscode` directory is generated dynamically by `sm create` based on the selected preset and components.
-
-- `settings.json`: Includes formatting, validation, and other settings.
-- `extensions.json`: Recommends VS Code extensions to install.
+The configuration is generated dynamically by `sm create` from template files based on the selected preset and components.
 
 ## Oxlint Config
 

@@ -30,7 +30,7 @@ CLI commands and Oxlint plugins are both verified end-to-end:
 
 ### CLI
 
-- `create`: cover default and custom options, invalid options, generated files, scripts, dependencies, package-manager invocation, and whether the generated project passes `sm check` immediately.
+- `create`: cover default and custom options, invalid options, template rendering, template file suffixes, JSON normalization, generated files, scripts, dependencies, package-manager invocation, and whether the generated project passes `sm check` immediately.
 - `check`: cover Oxlint, Stylelint, and Oxfmt success, failure, and fixes separately; file-type filtering; subcommand options; exit codes; and commit-message input from text, a file, and the default Git path.
 - `staged-run`: cover argument validation, no matching files, appending staged files, command exit-code propagation, and `--update-index`.
 - `set-git-hook`: cover hook contents, skipping without `.git`, overwriting existing hooks by default, and clearing `core.hooksPath`.

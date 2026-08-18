@@ -53,6 +53,9 @@ Generation rules:
 
 - When `--yes` is specified or the command runs in a non-interactive terminal, command-line arguments and defaults are used without showing the TUI.
 - The target is always the current working directory. The directory is not cleared, but template and generated files with the same names are overwritten.
+- Copy `configs/common/.editorconfig` unchanged.
+- Render the template files bundled with the package. Every template file ends in `.ejs`, and the output path removes only the final `.ejs` suffix; encountering another file type makes creation fail.
+- Parse every rendered JSON file and rewrite it with two-space indentation and a trailing newline. Invalid rendered JSON makes creation fail.
 - If the current directory is not inside a Git worktree, run `git init`.
 - Generate configuration and dependencies from `Runtime`, `Components`, and `CSS`; Vitest is always enabled.
 - Install dependencies with the selected package manager.
@@ -60,9 +63,11 @@ Generation rules:
 
 Generated output:
 
-- Always generate the base project files and TypeScript, Oxlint, Oxfmt, Vitest, and VS Code configurations; generate a Stylelint configuration when `CSS` is selected.
-- `package.json` always contains `check`, `check:fix`, and `test` scripts; add a `prepare` script when `Git Hook` is selected.
-- Development dependencies always include `@smallmains/dev`, TypeScript, Oxlint, Oxfmt, oxlint-tsgolint, and Vitest; add `@types/node` for the `Node.js` runtime and Stylelint when `CSS` is selected.
+- Always generate the base project files, a TypeScript source example, its colocated unit test, an integration test under `tests`, and TypeScript, Oxlint, Oxfmt, Vitest, and VS Code configurations; generate a Stylelint configuration when `CSS` is selected.
+- VS Code `settings.json` always configures Oxc formatting and adds `stylelint.validate` only when `CSS` is selected. `extensions.json` always recommends EditorConfig, Oxc, and Vitest, and additionally recommends Stylelint when `CSS` is selected.
+- `package.json` always exports `./src/index.ts` and contains `check`, `check:fix`, and `test` scripts; add a `prepare` script when `Git Hook` is selected.
+- Development dependencies always include `@smallmains/dev`, TypeScript, Oxlint, Oxfmt, oxlint-tsgolint, Vitest, and its V8 coverage provider; add `@types/node` for the `Node.js` runtime and Stylelint when `CSS` is selected.
+- The unit test imports the source module directly, while the integration test imports it through the generated package name.
 - `Runtime` selects the TypeScript configuration and runtime-specific Oxlint configuration; the `React` and `Security` components add their corresponding Oxlint configurations.
 - The `CSS` type selects the generic, CSS Modules, or Tailwind Stylelint configuration.
 
@@ -76,6 +81,7 @@ Tool execution rules:
 - Run Oxlint, Stylelint, and Oxfmt in order. A tool failure does not prevent later tools from running, and any tool failure makes the command fail.
 - When files are specified, Oxlint and Oxfmt receive all files, while Stylelint receives only its supported file types.
 - When no files are specified, each tool checks the project according to its own configuration; Stylelint uses the built-in style-file pattern.
+- Stylelint supports `.astro`, `.css`, `.ejs`, `.html`, `.less`, `.md`, `.mdx`, `.pcss`, `.sass`, `.scss`, `.svelte`, and `.vue` files.
 
 `check`
 

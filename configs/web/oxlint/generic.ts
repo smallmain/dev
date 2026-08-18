@@ -25,6 +25,8 @@ const base = defineConfig({
             "decorator",
             "platform",
             "bin",
+            "module",
+            "public",
             "__NO_SIDE_EFFECTS__",
             "__PURE__",
           ].map(v => [v, v]),
@@ -266,3 +268,6 @@ export { default as nextjs } from "./parts/nextjs.js";
 export { default as vitest } from "./parts/vitest.js";
 export { default as nodejs } from "./parts/nodejs.js";
 export { default as security } from "./parts/security.js";
+
+// TODO(oxc-project/oxc#24337): Remove this workaround once extended configs inherit settings.
+export const inheritSettings = base.settings;

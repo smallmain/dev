@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
@@ -80,8 +80,8 @@ async function createFakePackageManagers(dir: string): Promise<string> {
   return fakeBinDir;
 }
 
-const variants: { label: string; args: string[] }[] = [
-  { label: "default", args: [] },
+const variants: { label: string; args: string[]; runTests?: boolean }[] = [
+  { label: "default", args: [], runTests: true },
   { label: "css-modules", args: ["--component", "css", "--css", "css-modules"] },
 ];
 
@@ -111,6 +111,21 @@ for (const variant of variants) {
         expect(check.exitCode, formatCommandFailure("sm check", check)).toBe(0);
         expect(output).not.toContain("Format issues");
         expect(output.toLowerCase(), output).not.toContain("warning");
+
+        if (variant.runTests) {
+          const testRun = await runCommand(
+            process.execPath,
+            [path.join(repoRoot, "node_modules/vitest/vitest.mjs"), "run"],
+            { cwd: projectDir, env, timeoutMs: testTimeoutMs },
+          );
+
+          expect(testRun, formatCommandFailure("vitest run", testRun)).toMatchObject({
+            exitCode: 0,
+            timedOut: false,
+          });
+          expect(`${testRun.stdout}${testRun.stderr}`).toContain("Tests  2 passed");
+          expect((await stat(path.join(projectDir, "coverage"))).isDirectory()).toBe(true);
+        }
       });
     },
     testTimeoutMs,

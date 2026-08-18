@@ -1,0 +1,61 @@
+{
+  "name": <%- json(packageName) %>,
+  "version": "1.0.0",
+  "description": <%- json(description) %>,
+  "homepage": <%- json("https://github.com/" + githubOwner + "/" + githubRepo) %>,
+  "bugs": {
+    "url": <%- json("https://github.com/" + githubOwner + "/" + githubRepo + "/issues") %>
+  },
+  "license": "MIT",
+  "author": {
+    "name": <%- json(authorName) %>,
+    "email": <%- json(authorEmail) %>,
+    "url": <%- json(authorUrl) %>
+  },
+  "repository": {
+    "type": "git",
+    "url": <%- json("git+https://github.com/" + githubOwner + "/" + githubRepo + ".git") %>
+  },
+<% if (funding !== undefined) { %>
+  "funding": <%- json(funding) %>,
+<% } %>
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "check": "sm check",
+    "check:fix": "sm check --fix",
+<% if (hasGitHookComponent) { %>
+    "prepare": "sm set-git-hook",
+<% } %>
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@smallmains/dev": <%- json(devPackageVersion) %>,
+    "@vitest/coverage-v8": <%- json(vitestCoverageVersion) %>,
+    "oxfmt": <%- json(oxfmtVersion) %>,
+    "oxlint": <%- json(oxlintVersion) %>,
+    "oxlint-tsgolint": <%- json(oxlintTsgolintVersion) %>,
+    "typescript": <%- json(typescriptVersion) %>,
+<% if (hasCssComponent) { %>
+    "stylelint": <%- json(stylelintVersion) %>,
+<% } %>
+    "vitest": <%- json(vitestVersion) %><% if (isNodejs) { %>,
+    "@types/node": <%- json(nodeTypesVersion) %><% } %>
+  },
+  "devEngines": <% if (hasSourceDevEngines) { %><%- json(sourceDevEngines) %><% } else if (packageManager === "npm") { %>{
+    "packageManager": {
+      "name": "npm",
+      "version": "11",
+      "onFail": "download"
+    }
+  }<% } else { %>{
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.8.0",
+      "onFail": "download"
+    }
+  }<% } %><% if (isNodejs) { %>,
+  "engines": {
+    "node": <%- json(nodeEngineVersion) %>
+  }<% } %>
+}

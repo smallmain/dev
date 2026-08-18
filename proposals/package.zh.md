@@ -24,6 +24,7 @@
 
 - 从根目录 `package.json` 生成产物的 `package.json`，删除仅用于仓库开发的 `scripts` 和 `devEngines`。
 - 将 `configs/web/typescript` 复制到 `ts`，将 `configs/common` 和 `templates` 保持目录结构复制到产物。
+- 保留发布产物 `templates` 目录下每个普通文件末尾的 `.ejs` 后缀；`configs/common/.editorconfig` 保持位于模板目录之外的现有路径。
 - 将整个 `configs/web` 作为一次 TypeScript 编译，保持 `oxlint`、`oxfmt`、`stylelint` 和内部 `shared` 目录结构，同时生成 JavaScript 和类型声明；源码中的相对导入使用 `.js` 扩展名。
 - 将整个 `src` 作为另一次 TypeScript 编译输出到 `cli`，使用 NodeNext 模块解析并重写相对 TypeScript 导入扩展名。
 - 生成可执行入口 `bin/sm.js`，以及空的包入口 `index.js` 和 `types/index.d.ts`。

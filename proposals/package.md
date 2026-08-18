@@ -24,6 +24,7 @@ Build rules:
 
 - Generate the output `package.json` from the root `package.json`, removing the repository-only `scripts` and `devEngines` fields.
 - Copy `configs/web/typescript` to `ts`, and copy `configs/common` and `templates` to the output while preserving their directory structures.
+- Preserve the final `.ejs` suffix of every regular file under the published `templates` directory. Keep `configs/common/.editorconfig` outside the template directory at its existing path.
 - Compile all of `configs/web` in one TypeScript compilation, preserving the `oxlint`, `oxfmt`, `stylelint`, and internal `shared` directory structures while emitting JavaScript and declarations; relative source imports use `.js` extensions.
 - Compile all of `src` in a separate TypeScript compilation to `cli`, using NodeNext module resolution and rewriting relative TypeScript import extensions.
 - Generate the executable `bin/sm.js` entry point and the empty package entry points `index.js` and `types/index.d.ts`.

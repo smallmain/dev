@@ -85,6 +85,35 @@ test(
 );
 
 test(
+  "check lint includes EJS files by default and when explicitly provided",
+  async () => {
+    await withCheckFixture({ badCss: false, badFormat: false, badTs: false }, async fixture => {
+      const ejsPath = "views/bad.ejs";
+
+      await mkdir(path.dirname(path.join(fixture.cwd, ejsPath)), { recursive: true });
+      await writeFile(path.join(fixture.cwd, ejsPath), createBadCss());
+
+      const defaultResult = await runSm(["check", "lint"], {
+        cwd: fixture.cwd,
+        env: fixture.env,
+      });
+      const explicitResult = await runSm(["check", "lint", ejsPath], {
+        cwd: fixture.cwd,
+        env: fixture.env,
+      });
+
+      expect(defaultResult.exitCode).not.toBe(0);
+      expect(commandOutput(defaultResult)).toContain(ejsPath);
+      expect(commandOutput(defaultResult)).toContain("color-no-invalid-hex");
+      expect(explicitResult.exitCode).not.toBe(0);
+      expect(commandOutput(explicitResult)).toContain(ejsPath);
+      expect(commandOutput(explicitResult)).toContain("color-no-invalid-hex");
+    });
+  },
+  testTimeoutMs,
+);
+
+test(
   "check reports Oxfmt failures",
   async () => {
     await withCheckFixture({ badCss: false, badFormat: true, badTs: false }, async fixture => {

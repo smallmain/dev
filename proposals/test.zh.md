@@ -30,7 +30,7 @@ CLI 命令与 Oxlint 插件均以端到端方式验证：
 
 ### CLI
 
-- `create`：覆盖默认与自定义选项、非法选项、生成文件、脚本、依赖、包管理器调用，以及生成项目可直接通过 `sm check`。
+- `create`：覆盖默认与自定义选项、非法选项、模板渲染、模板文件后缀、JSON 规范化、生成文件、脚本、依赖、包管理器调用，以及生成项目可直接通过 `sm check`。
 - `check`：分别覆盖 Oxlint、Stylelint、Oxfmt 的成功、失败和修复，文件类型筛选、子命令参数、退出码，以及提交信息的文本、文件和默认 Git 路径输入。
 - `staged-run`：覆盖参数校验、无匹配文件、暂存文件追加、命令退出码传递和 `--update-index`。
 - `set-git-hook`：覆盖 Hook 内容、无 `.git` 时跳过、默认覆盖已有 Hook，以及清除 `core.hooksPath`。

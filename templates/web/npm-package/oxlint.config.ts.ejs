@@ -1,0 +1,8 @@
+import { defineConfig } from "oxlint";
+import generic, inheritSettings<%- oxlintNamedImports %> from "@smallmains/dev/oxlint/generic.js";
+
+export default defineConfig({
+  extends: [generic<%- oxlintExtends %>],
+  // TODO(oxc-project/oxc#24337): Remove this workaround once extended configs inherit settings.
+  settings: inheritSettings,
+});

@@ -33,13 +33,13 @@ SmallMain 使用的开发脚手架。
     <td rowspan="4">-</td>
   </tr>
   <tr>
-    <td><a href="#cli">CLI</a></td><td>2026.06.15</td>
+    <td><a href="#cli">CLI</a></td><td>2026.08.18</td>
   </tr>
   <tr>
     <td><a href="#editor-config">Editor Config</a></td><td>EditorConfig Specification v0.17.2; 2026.06.15</td>
   </tr>
     <tr>
-    <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.06.15</td>
+    <td><a href="#vs-code-config">VS Code Config</a></td><td>VS Code v1.124.2; 2026.08.18</td>
   </tr>
   <tr>
     <td rowspan="2">Specification</td>
@@ -191,10 +191,7 @@ npm i -D @smallmains/dev
 
 ## VS Code Config
 
-由 `sm create` 根据选择的预设和组件动态生成 `.vscode` 目录。
-
-- `settings.json`：包括格式化、校验等设置。
-- `extensions.json`：推荐安装的 VS Code 扩展。
+由 `sm create` 根据选择的预设和组件从模板文件动态生成。
 
 ## Oxlint Config
 

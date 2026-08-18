@@ -1,0 +1,6 @@
+import { expect, test } from "vitest";
+import { value } from <%- json(packageName) %>;
+
+test("exposes a useful value from the package", () => {
+  expect(value).toBe("hello world.");
+});

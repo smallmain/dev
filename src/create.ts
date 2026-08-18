@@ -1,7 +1,8 @@
-import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stdin, stdout } from "node:process";
 import { emitKeypressEvents } from "node:readline";
+import ejs from "ejs";
 import { runCheckOrThrow } from "./check.ts";
 import { commandSucceeds, runCommandOrThrow } from "./command-utils.ts";
 import {
@@ -58,7 +59,7 @@ interface CreateDefaults {
   packageManager: PackageManager;
 }
 
-type TemplateValues = Record<string, string>;
+type TemplateValues = Record<string, unknown>;
 type Preset = "npm-package";
 type Runtime = "neutral" | "browser" | "nodejs";
 type CssComponent = "native" | "css-modules" | "tailwind";
@@ -131,22 +132,6 @@ const supportedComponents = new Set<Component>(["git-hook", "react", "css", "sec
 const supportedRuntimes = new Set<Runtime>(["neutral", "browser", "nodejs"]);
 const supportedCssComponents = new Set<CssComponent>(["native", "css-modules", "tailwind"]);
 const supportedPackageManagers = new Set<PackageManager>(["npm", "pnpm"]);
-const defaultDevEnginesByPackageManager = {
-  npm: {
-    packageManager: {
-      name: "npm",
-      version: "11",
-      onFail: "download",
-    },
-  },
-  pnpm: {
-    packageManager: {
-      name: "pnpm",
-      version: "11.8.0",
-      onFail: "download",
-    },
-  },
-} satisfies Record<PackageManager, unknown>;
 
 export async function runCreateCommand(
   options: RawCreateOptions,
@@ -158,13 +143,11 @@ export async function runCreateCommand(
 
   await ensureGitRepository(targetDir);
   await renderTemplateDirectory(commonTemplateDir, targetDir, templateValues);
-  await renderTemplateDirectory(commonConfigDir, targetDir, templateValues);
-  await renderTemplateDirectory(webNpmPackageTemplateDir, targetDir, templateValues);
-  await writeJson(
-    path.join(targetDir, "package.json"),
-    createProjectPackageJson(context, packageJson),
+  await copyFile(
+    path.join(commonConfigDir, ".editorconfig"),
+    path.join(targetDir, ".editorconfig"),
   );
-  await writeVsCodeConfig(targetDir, context);
+  await renderTemplateDirectory(webNpmPackageTemplateDir, targetDir, templateValues);
 
   if (hasCssComponent(context)) {
     await renderTemplateDirectory(webNpmPackageCssTemplateDir, targetDir, templateValues);
@@ -972,72 +955,14 @@ function renderChoice(choice: string, focused: boolean): string {
   return focused ? `\x1B[7m${choice}\x1B[27m` : choice;
 }
 
-function createProjectPackageJson(context: CreateContext, packageJson: PackageJson): unknown {
-  const author = getAuthor(packageJson);
-  const scripts: Record<string, string> = {
-    check: "sm check",
-    "check:fix": "sm check --fix",
-  };
-
-  if (hasGitHookComponent(context)) {
-    scripts.prepare = "sm set-git-hook";
-  }
-
-  scripts.test = "vitest";
-
-  const devDependencies: Record<string, string> = {
-    "@smallmains/dev": createDevPackageVersion(packageJson),
-    oxfmt: getDependencyVersion(packageJson, "oxfmt"),
-    oxlint: getDependencyVersion(packageJson, "oxlint"),
-    "oxlint-tsgolint": getDependencyVersion(packageJson, "oxlint-tsgolint"),
-    typescript: getDependencyVersion(packageJson, "typescript"),
-  };
-
-  if (hasCssComponent(context)) {
-    devDependencies.stylelint = getDependencyVersion(packageJson, "stylelint");
-  }
-
-  devDependencies.vitest = getDependencyVersion(packageJson, "vitest");
-
-  if (context.runtime === "nodejs") {
-    devDependencies["@types/node"] = getDependencyVersion(packageJson, "@types/node");
-  }
-
-  const projectPackageJson: Record<string, unknown> = {
-    name: context.packageName,
-    version: "1.0.0",
-    description: context.description,
-    homepage: `https://github.com/${context.githubOwner}/${context.githubRepo}`,
-    bugs: {
-      url: `https://github.com/${context.githubOwner}/${context.githubRepo}/issues`,
-    },
-    license: "MIT",
-    author,
-    repository: {
-      type: "git",
-      url: `git+https://github.com/${context.githubOwner}/${context.githubRepo}.git`,
-    },
-    funding: packageJson.funding,
-    type: "module",
-    scripts,
-    devDependencies,
-    devEngines: createDevEngines(context.packageManager, packageJson),
-  };
-
-  if (context.runtime === "nodejs") {
-    projectPackageJson.engines = {
-      node: createNodeEngineVersion(context.nodeVersion),
-    };
-  }
-
-  return projectPackageJson;
-}
-
 function createTemplateValues(context: CreateContext, packageJson: PackageJson): TemplateValues {
   const author = getAuthor(packageJson);
+  const hasCss = hasCssComponent(context);
+  const isNodejs = context.runtime === "nodejs";
   const oxlintParts = createOxlintParts(context);
   const oxlintNamedImports = oxlintParts.length > 0 ? `, { ${oxlintParts.join(", ")} }` : "";
   const oxlintExtends = oxlintParts.length > 0 ? `, ${oxlintParts.join(", ")}` : "";
+  const sourceDevEngines = resolveSourceDevEngines(context.packageManager, packageJson);
 
   return {
     packageName: context.packageName,
@@ -1050,9 +975,26 @@ function createTemplateValues(context: CreateContext, packageJson: PackageJson):
     authorName: author.name,
     authorEmail: author.email,
     authorUrl: author.url,
+    devPackageVersion: createDevPackageVersion(packageJson),
+    funding: packageJson.funding,
+    hasCssComponent: hasCss,
+    hasGitHookComponent: hasGitHookComponent(context),
+    hasSourceDevEngines: sourceDevEngines !== undefined,
+    isNodejs,
+    json: stringifyJson,
     licenseYear: String(new Date().getFullYear()),
+    nodeEngineVersion: isNodejs ? createNodeEngineVersion(context.nodeVersion) : "",
+    nodeTypesVersion: isNodejs ? getDependencyVersion(packageJson, "@types/node") : "",
+    oxfmtVersion: getDependencyVersion(packageJson, "oxfmt"),
+    oxlintTsgolintVersion: getDependencyVersion(packageJson, "oxlint-tsgolint"),
+    oxlintVersion: getDependencyVersion(packageJson, "oxlint"),
     packageManager: context.packageManager,
+    sourceDevEngines,
+    stylelintVersion: hasCss ? getDependencyVersion(packageJson, "stylelint") : "",
     typescriptConfig: createTypeScriptConfigName(context.runtime),
+    typescriptVersion: getDependencyVersion(packageJson, "typescript"),
+    vitestCoverageVersion: getDependencyVersion(packageJson, "@vitest/coverage-v8"),
+    vitestVersion: getDependencyVersion(packageJson, "vitest"),
     stylelintConfig: createStylelintConfigName(context.cssComponent),
     oxlintNamedImports,
     oxlintExtends,
@@ -1070,10 +1012,9 @@ async function renderTemplateDirectory(
 
   for (const entry of entries) {
     const sourcePath = path.join(sourceDir, entry.name);
-    const targetPath = path.join(targetDir, resolveTemplateOutputName(entry.name));
 
     if (entry.isDirectory()) {
-      await renderTemplateDirectory(sourcePath, targetPath, values);
+      await renderTemplateDirectory(sourcePath, path.join(targetDir, entry.name), values);
       continue;
     }
 
@@ -1081,66 +1022,34 @@ async function renderTemplateDirectory(
       continue;
     }
 
-    const content = renderTemplate(await readFile(sourcePath, "utf8"), values);
+    if (!entry.name.endsWith(".ejs")) {
+      throw new Error(`Template file must use the .ejs extension: ${sourcePath}`);
+    }
+
+    const targetPath = path.join(targetDir, resolveTemplateOutputName(entry.name));
+    const renderedContent = renderTemplate(await readFile(sourcePath, "utf8"), values, sourcePath);
+    const content = targetPath.endsWith(".json")
+      ? formatRenderedJson(renderedContent, sourcePath)
+      : renderedContent;
     await mkdir(path.dirname(targetPath), { recursive: true });
     await writeFile(targetPath, content);
   }
 }
 
-function renderTemplate(content: string, values: TemplateValues): string {
-  let renderedContent = content;
-
-  for (const [key, value] of Object.entries(values)) {
-    renderedContent = renderedContent.replaceAll(`{{${key}}}`, value);
-  }
-
-  return renderedContent;
+function renderTemplate(content: string, values: TemplateValues, sourcePath: string): string {
+  return ejs.render(content, values, { async: false, filename: sourcePath });
 }
 
 function resolveTemplateOutputName(name: string): string {
-  return name.endsWith(".tmpl") ? name.slice(0, -".tmpl".length) : name;
+  return name.slice(0, -".ejs".length);
 }
 
-async function writeVsCodeConfig(targetDir: string, context: CreateContext): Promise<void> {
-  const settings: Record<string, unknown> = {
-    "[javascript][typescript][javascriptreact][typescriptreact]": {
-      "editor.defaultFormatter": "oxc.oxc-vscode",
-    },
-    "[markdown][mdx]": {
-      "editor.defaultFormatter": "oxc.oxc-vscode",
-    },
-    "[json][jsonc][jsonl][snippets][yaml]": {
-      "editor.defaultFormatter": "oxc.oxc-vscode",
-    },
-  };
-  const recommendations = ["editorconfig.editorconfig", "oxc.oxc-vscode"];
-
-  if (hasCssComponent(context)) {
-    settings["[html][css][scss][less]"] = {
-      "editor.defaultFormatter": "oxc.oxc-vscode",
-    };
-    settings["[vue]"] = {
-      "editor.defaultFormatter": "oxc.oxc-vscode",
-    };
-    settings["stylelint.validate"] = [
-      "css",
-      "postcss",
-      "html",
-      "vue",
-      "svelte",
-      "astro",
-      "markdown",
-      "mdx",
-    ];
-    recommendations.push("stylelint.vscode-stylelint");
+function formatRenderedJson(content: string, sourcePath: string): string {
+  try {
+    return `${stringifyJson(JSON.parse(content) as unknown, 2)}\n`;
+  } catch (error) {
+    throw new Error(`Rendered template is not valid JSON: ${sourcePath}`, { cause: error });
   }
-
-  recommendations.push("vitest.explorer");
-
-  const vscodeDir = path.join(targetDir, ".vscode");
-  await mkdir(vscodeDir, { recursive: true });
-  await writeJson(path.join(vscodeDir, "settings.json"), settings);
-  await writeJson(path.join(vscodeDir, "extensions.json"), { recommendations });
 }
 
 async function ensureGitRepository(targetDir: string): Promise<void> {
@@ -1156,9 +1065,14 @@ async function ensureGitRepository(targetDir: string): Promise<void> {
   await runCommandOrThrow("git", ["init"], { cwd: targetDir });
 }
 
-async function writeJson(filePath: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
+function stringifyJson(value: unknown, space?: number): string {
+  const content = JSON.stringify(value, null, space);
+
+  if (content === undefined) {
+    throw new Error("Template JSON value cannot be undefined.");
+  }
+
+  return content;
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -1200,12 +1114,13 @@ function createDevPackageVersion(packageJson: PackageJson): string {
   return packageJson.version ? `^${packageJson.version}` : "latest";
 }
 
-function createDevEngines(packageManager: PackageManager, packageJson: PackageJson): unknown {
-  if (hasPackageManagerDevEngine(packageJson.devEngines, packageManager)) {
-    return packageJson.devEngines;
-  }
-
-  return defaultDevEnginesByPackageManager[packageManager];
+function resolveSourceDevEngines(
+  packageManager: PackageManager,
+  packageJson: PackageJson,
+): unknown | undefined {
+  return hasPackageManagerDevEngine(packageJson.devEngines, packageManager)
+    ? packageJson.devEngines
+    : undefined;
 }
 
 function hasPackageManagerDevEngine(devEngines: unknown, packageManager: PackageManager): boolean {

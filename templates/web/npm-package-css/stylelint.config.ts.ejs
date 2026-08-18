@@ -1,5 +1,5 @@
 import type { Config } from "stylelint";
 
 export default {
-  extends: "@smallmains/dev/stylelint/{{stylelintConfig}}.js",
+  extends: "@smallmains/dev/stylelint/<%- stylelintConfig %>.js",
 } satisfies Config;

@@ -1,5 +1,6 @@
 {
   "files.associations": {
     "/**/configs/web/typescript/*.json": "jsonc"
-  }
+  },
+  "stylelint.enable": false
 }
