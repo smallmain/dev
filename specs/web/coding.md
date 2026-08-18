@@ -35,15 +35,15 @@ English | [简体中文](coding.zh.md)
 
 ### Semantic conventions
 
-| Convention   | Description                                                                                          | Example                                    |
-| ------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `acquire...` | The function returns a `Disposable` object.                                                          | `function acquireFile(): FileHandle`       |
-| `when...`    | The function returns an `Observable` object.                                                         | `function when(event: string): Observable` |
-| `ensure...`  | The function is a cached version of the same-named creation function and may return a cached value.  | `function ensureObject(): Object`          |
-| `into...`    | The function is an in-place writing version of the same-named function.                              | `function encodeInto(out: T): void`        |
-| `...sync`    | The function is a synchronous version of the same-named function with the same purpose.              | `function writeSync(): boolean`            |
-| `...async`   | The function is an asynchronous version of the same-named function with the same purpose.            | `function writeAsync(): Promise<boolean>`  |
-| `use...`     | The function is a React Hooks function.                                                              | `function useUser(): User`                 |
+| Convention   | Description                                                                                         | Example                                    |
+| ------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `acquire...` | The function returns a `Disposable` object.                                                         | `function acquireFile(): FileHandle`       |
+| `when...`    | The function returns an `Observable` object.                                                        | `function when(event: string): Observable` |
+| `ensure...`  | The function is a cached version of the same-named creation function and may return a cached value. | `function ensureObject(): Object`          |
+| `into...`    | The function is an in-place writing version of the same-named function.                             | `function encodeInto(out: T): void`        |
+| `...sync`    | The function is a synchronous version of the same-named function with the same purpose.             | `function writeSync(): boolean`            |
+| `...async`   | The function is an asynchronous version of the same-named function with the same purpose.           | `function writeAsync(): Promise<boolean>`  |
+| `use...`     | The function is a React Hooks function.                                                             | `function useUser(): User`                 |
 
 ## Symbol order
 
@@ -84,7 +84,7 @@ In a class, members may be ordered by the following types:
 - Inline comments should preferably start with a lowercase letter and may omit the period.
 - If an identifier from the code appears, do not change its capitalization.
 - Code, identifiers, and symbols in documentation comments must be wrapped in the `{@link symbol}` link format, and the linked symbol must have been imported at least as a `type`.
-- When `{@link symbol}` cannot be used for navigation (non-documentation comments, identifiers, primitive types, or short code phrases), wrap them in backticks (`), for example `number` and `string`.
+- When `{@link symbol}` cannot be used for navigation (non-documentation comments, identifiers, primitive types, or short code phrases), wrap them in backticks (\`), for example `number` and `string`.
 
 ### Inline comments
 

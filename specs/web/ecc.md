@@ -57,7 +57,6 @@ A typical multi-group configuration example:
 
 The `default` conditional constant always exists and does not need to be declared explicitly.
 
-
 ## Code imports
 
 Conditional constants must be importable with `import { CONDITION_NAME } from "..."`.

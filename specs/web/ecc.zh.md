@@ -57,7 +57,6 @@
 
 `default` 条件常量固定存在，无需显式声明。
 
-
 ## 代码导入
 
 条件常量必须能够通过 `import { CONDITION_NAME } from "..."` 的方式导入。

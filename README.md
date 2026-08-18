@@ -207,10 +207,12 @@ Example:
 
 ```ts
 import { defineConfig } from "oxlint";
-import generic, { vitest } from "@smallmains/dev/oxlint/generic.js";
+import generic, { inheritSettings, vitest } from "@smallmains/dev/oxlint/generic.js";
 
 export default defineConfig({
   extends: [generic, vitest],
+  // TODO(oxc-project/oxc#24337): Remove this workaround once extended configs inherit settings.
+  settings: inheritSettings,
 });
 ```
 
