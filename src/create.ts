@@ -960,7 +960,7 @@ function createTemplateValues(context: CreateContext, packageJson: PackageJson):
   const hasCss = hasCssComponent(context);
   const isNodejs = context.runtime === "nodejs";
   const oxlintParts = createOxlintParts(context);
-  const oxlintNamedImports = oxlintParts.length > 0 ? `, { ${oxlintParts.join(", ")} }` : "";
+  const oxlintNamedImports = ["inheritSettings", ...oxlintParts].join(", ");
   const oxlintExtends = oxlintParts.length > 0 ? `, ${oxlintParts.join(", ")}` : "";
   const sourceDevEngines = resolveSourceDevEngines(context.packageManager, packageJson);
 

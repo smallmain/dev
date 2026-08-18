@@ -94,10 +94,10 @@ test(
       expect(settingsJson["[html][css][scss][less]"]).toBeDefined();
       expect(settingsJson["[vue]"]).toBeDefined();
       expect(settingsJson["stylelint.validate"]).toBeUndefined();
-      expect(oxlintConfig).toContain("{ vitest }");
+      expect(oxlintConfig).toContain("{ inheritSettings, vitest }");
       expect(oxlintConfig).toContain("extends: [generic, vitest]");
       expect(oxlintConfig).toContain("oxc-project/oxc#24337");
-      expect(oxlintConfig).toContain("settings: generic.settings");
+      expect(oxlintConfig).toContain("settings: inheritSettings");
       expect(oxlintConfig).not.toContain("<%");
       await expectJsonFileFormatted(path.join(projectDir, "package.json"));
       await expectJsonFileFormatted(path.join(projectDir, ".vscode/settings.json"));
@@ -197,10 +197,10 @@ test(
       expect(packageJson.devEngines?.packageManager?.name).toBe("npm");
       expect(packageJson.engines?.node).toBe("^24");
       expect(stylelintConfig).toContain("@smallmains/dev/stylelint/css-modules.js");
-      expect(oxlintConfig).toContain("{ nodejs, vitest }");
+      expect(oxlintConfig).toContain("{ inheritSettings, nodejs, vitest }");
       expect(oxlintConfig).toContain("extends: [generic, nodejs, vitest]");
       expect(oxlintConfig).toContain("oxc-project/oxc#24337");
-      expect(oxlintConfig).toContain("settings: generic.settings");
+      expect(oxlintConfig).toContain("settings: inheritSettings");
       expect(extensionsJson.recommendations).toEqual(
         expect.arrayContaining(["stylelint.vscode-stylelint", "vitest.explorer"]),
       );

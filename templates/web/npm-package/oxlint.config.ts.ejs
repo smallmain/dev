@@ -1,5 +1,5 @@
 import { defineConfig } from "oxlint";
-import generic, inheritSettings<%- oxlintNamedImports %> from "@smallmains/dev/oxlint/generic.js";
+import generic, { <%- oxlintNamedImports %> } from "@smallmains/dev/oxlint/generic.js";
 
 export default defineConfig({
   extends: [generic<%- oxlintExtends %>],
