@@ -3,10 +3,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import { distDir, runOxlint, testTimeoutMs } from "./cli-e2e-utils.ts";
+import {
+  distDir,
+  formatCommandFailure,
+  parseOxlintReport,
+  runOxlint,
+  testTimeoutMs,
+} from "./cli-e2e-utils.ts";
 
 const pluginPath = path.join(distDir, "oxlint/plugins/comments.js");
-const missingDescriptionMessage = "directive comment without a description";
+const ruleCode = "comments(require-description)";
 
 interface CommentsFixture {
   cwd: string;
@@ -80,8 +86,23 @@ test(
         targets: ["src/missing.ts"],
       });
 
-      expect(run.exitCode).not.toBe(0);
-      expect(run.stdout).toContain(missingDescriptionMessage);
+      expect(run.timedOut, formatCommandFailure("oxlint --format json", run)).toBe(false);
+      expect(run.exitCode, formatCommandFailure("oxlint --format json", run)).not.toBe(0);
+      const report = parseOxlintReport(run);
+
+      expect(report.diagnostics).toHaveLength(2);
+      expect(report.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: ruleCode,
+            filename: "src/missing.ts",
+            severity: "error",
+          }),
+        ]),
+      );
+      expect(
+        report.diagnostics.flatMap(diagnostic => diagnostic.labels.map(label => label.span.line)),
+      ).toEqual([1, 2]);
     });
   },
   testTimeoutMs,
@@ -109,7 +130,11 @@ test(
         targets: ["src/described.ts"],
       });
 
-      expect(run.exitCode, run.stdout || run.stderr).toBe(0);
+      expect(run, formatCommandFailure("oxlint --format json", run)).toMatchObject({
+        exitCode: 0,
+        timedOut: false,
+      });
+      expect(parseOxlintReport(run).diagnostics).toEqual([]);
     });
   },
   testTimeoutMs,
@@ -137,7 +162,11 @@ test(
         targets: ["src/eslint.ts"],
       });
 
-      expect(run.exitCode, run.stdout || run.stderr).toBe(0);
+      expect(run, formatCommandFailure("oxlint --format json", run)).toMatchObject({
+        exitCode: 0,
+        timedOut: false,
+      });
+      expect(parseOxlintReport(run).diagnostics).toEqual([]);
     });
   },
   testTimeoutMs,
@@ -165,11 +194,21 @@ test(
         targets: ["src/ignored.ts"],
       });
 
-      expect(run.exitCode, "the non-ignored directive should still be reported").not.toBe(0);
-      expect(run.stdout, "the ignored directive should not be reported").not.toContain(
-        "oxlint-disable-line",
-      );
-      expect(run.stdout).toContain(missingDescriptionMessage);
+      expect(run.timedOut, formatCommandFailure("oxlint --format json", run)).toBe(false);
+      expect(
+        run.exitCode,
+        `the non-ignored directive should still be reported\n${formatCommandFailure("oxlint --format json", run)}`,
+      ).not.toBe(0);
+      const report = parseOxlintReport(run);
+
+      expect(report.diagnostics).toEqual([
+        expect.objectContaining({
+          code: ruleCode,
+          filename: "src/ignored.ts",
+          labels: [expect.objectContaining({ span: expect.objectContaining({ line: 2 }) })],
+          severity: "error",
+        }),
+      ]);
     });
   },
   testTimeoutMs,

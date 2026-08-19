@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { formatCommandFailure, repoRoot, runSm, testTimeoutMs } from "./cli-e2e-utils.ts";
+import {
+  type CommandResult,
+  formatCommandFailure,
+  repoRoot,
+  runSm,
+  testTimeoutMs,
+} from "./cli-e2e-utils.ts";
 
 interface CheckFixture {
   cwd: string;
@@ -62,9 +68,7 @@ test(
     await withCheckFixture({ badCss: false, badFormat: false, badTs: true }, async fixture => {
       const result = await runSm(["check", "--no-format"], { cwd: fixture.cwd, env: fixture.env });
 
-      expect(result.exitCode).not.toBe(0);
-      expect(commandOutput(result)).toContain(fixture.path.badTs);
-      expect(commandOutput(result)).toContain("no-unused-vars");
+      expectCommandFailed("sm check --no-format", result);
     });
   },
   testTimeoutMs,
@@ -76,9 +80,7 @@ test(
     await withCheckFixture({ badCss: true, badFormat: false, badTs: false }, async fixture => {
       const result = await runSm(["check", "--no-format"], { cwd: fixture.cwd, env: fixture.env });
 
-      expect(result.exitCode).not.toBe(0);
-      expect(commandOutput(result)).toContain(fixture.path.badCss);
-      expect(commandOutput(result)).toContain("color-no-invalid-hex");
+      expectCommandFailed("sm check --no-format", result);
     });
   },
   testTimeoutMs,
@@ -102,12 +104,8 @@ test(
         env: fixture.env,
       });
 
-      expect(defaultResult.exitCode).not.toBe(0);
-      expect(commandOutput(defaultResult)).toContain(ejsPath);
-      expect(commandOutput(defaultResult)).toContain("color-no-invalid-hex");
-      expect(explicitResult.exitCode).not.toBe(0);
-      expect(commandOutput(explicitResult)).toContain(ejsPath);
-      expect(commandOutput(explicitResult)).toContain("color-no-invalid-hex");
+      expectCommandFailed("sm check lint", defaultResult);
+      expectCommandFailed(`sm check lint ${ejsPath}`, explicitResult);
     });
   },
   testTimeoutMs,
@@ -119,8 +117,7 @@ test(
     await withCheckFixture({ badCss: false, badFormat: true, badTs: false }, async fixture => {
       const result = await runSm(["check", "--no-lint"], { cwd: fixture.cwd, env: fixture.env });
 
-      expect(result.exitCode).not.toBe(0);
-      expect(commandOutput(result)).toContain(fixture.path.badFormat);
+      expectCommandFailed("sm check --no-lint", result);
     });
   },
   testTimeoutMs,
@@ -193,9 +190,7 @@ test(
     await withCheckFixture({ badCss: false, badFormat: false, badTs: true }, async fixture => {
       const result = await runSm(["check", "lint"], { cwd: fixture.cwd, env: fixture.env });
 
-      expect(result.exitCode).not.toBe(0);
-      expect(commandOutput(result)).toContain(fixture.path.badTs);
-      expect(commandOutput(result)).toContain("no-unused-vars");
+      expectCommandFailed("sm check lint", result);
     });
   },
   testTimeoutMs,
@@ -207,9 +202,7 @@ test(
     await withCheckFixture({ badCss: true, badFormat: false, badTs: false }, async fixture => {
       const result = await runSm(["check", "lint"], { cwd: fixture.cwd, env: fixture.env });
 
-      expect(result.exitCode).not.toBe(0);
-      expect(commandOutput(result)).toContain(fixture.path.badCss);
-      expect(commandOutput(result)).toContain("color-no-invalid-hex");
+      expectCommandFailed("sm check lint", result);
     });
   },
   testTimeoutMs,
@@ -235,7 +228,6 @@ test(
         exitCode: 0,
         timedOut: false,
       });
-      expect(commandOutput(tsOnlyResult)).not.toContain(fixture.path.badCss);
       expect(
         cssOnlyResult,
         formatCommandFailure("sm check lint goodCss", cssOnlyResult),
@@ -243,7 +235,6 @@ test(
         exitCode: 0,
         timedOut: false,
       });
-      expect(commandOutput(cssOnlyResult)).not.toContain(fixture.path.badTs);
     });
   },
   testTimeoutMs,
@@ -287,8 +278,7 @@ test(
     await withCheckFixture({ badCss: false, badFormat: true, badTs: false }, async fixture => {
       const result = await runSm(["check", "format"], { cwd: fixture.cwd, env: fixture.env });
 
-      expect(result.exitCode).not.toBe(0);
-      expect(commandOutput(result)).toContain(fixture.path.badFormat);
+      expectCommandFailed("sm check format", result);
     });
   },
   testTimeoutMs,
@@ -341,9 +331,8 @@ test(
       exitCode: 0,
       timedOut: false,
     });
-    expect(invalidResult.exitCode).not.toBe(0);
-    expect(invalidResult.stderr).toContain("subject may not be empty");
-    expect(invalidResult.stderr).toContain("type may not be empty");
+    expectCommandFailed("sm check commit-message invalid", invalidResult);
+    expect(invalidResult.stderr).toContain("commit-message error:");
   },
   testTimeoutMs,
 );
@@ -409,7 +398,7 @@ test(
         },
       );
 
-      expect(result.exitCode).not.toBe(0);
+      expectCommandFailed("sm check commit-message file and text", result);
       expect(result.stderr).toContain("Pass either a commit message file or --text, not both.");
     });
   },
@@ -570,8 +559,11 @@ async function readFixtureFile(fixture: CheckFixture, filePath: string): Promise
   return readFile(path.join(fixture.cwd, filePath), "utf8");
 }
 
-function commandOutput(result: { stdout: string; stderr: string }): string {
-  return `${result.stdout}\n${result.stderr}`;
+function expectCommandFailed(command: string, result: CommandResult): void {
+  const context = formatCommandFailure(command, result);
+
+  expect(result.timedOut, context).toBe(false);
+  expect(result.exitCode, context).not.toBe(0);
 }
 
 async function cleanupFixture(cwd: string, passed: boolean): Promise<void> {

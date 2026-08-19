@@ -44,5 +44,10 @@ CLI commands and Oxlint plugins are both verified end-to-end:
 ## Assertions
 
 - Successful scenarios must assert an exit code of `0` and no timeout.
-- Failure scenarios must assert a nonzero exit code and output that identifies the failure reason.
+- Failure scenarios must assert a nonzero exit code and, when possible, a structured diagnostic or observable final state that identifies the failure reason.
+- Use the exit code, signal, timeout state, and observable final state as the primary machine-readable contracts. Do not infer success or failure from human-readable summaries.
+- When a tool provides structured output, such as JSON, SARIF, a report file, or a programmatic API, enable and parse it. Assert semantic fields such as rule identifiers, file paths, severities, counts, and statuses instead of searching the complete standard output or standard error as text.
+- Do not strip ANSI control sequences or normalize terminal spacing, colors, or summary wording to make semantic assertions pass. Presentation-only changes in third-party tools must not break tests.
+- Assert human-readable standard output or standard error only when that text is an intentionally supported, package-owned interface, such as help, usage, or a stable CLI error. Third-party output may be included as failure context, but must not be the sole semantic assertion.
+- When structured output is unavailable, combine process status with an observable final state or a narrowly scoped package-owned output contract.
 - Scenarios involving files, configuration, the Git index, or automatic fixes must assert the final state instead of checking command output alone.

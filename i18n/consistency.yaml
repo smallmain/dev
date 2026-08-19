@@ -8,8 +8,8 @@ proposals/oxlint-plugin.md: 576ad2d50dbd3e1994c1c5fc507e37a14c2af0f0
 proposals/oxlint-plugin.zh.md: a398e5a2afdda66eea0a050f4678cf284a9edf24
 proposals/package.md: 6bdfdc748951cedd7f5e9628557ba7eafe20a604
 proposals/package.zh.md: e226e50d94261b560f9bdb91703004349ce924fd
-proposals/test.md: 23df69668e2f18bfe80459f7c7aab51e67548b3a
-proposals/test.zh.md: 145251731746cf20120f612ea0443d52d71838a7
+proposals/test.md: b689a65de621d185e072b18d593a996afe649668
+proposals/test.zh.md: ebbc91909acf3598d8ac85d544427066b5a5e3d3
 specs/web/coding.md: 1b8815897b2654c91ffec07553cca940c025266b
 specs/web/coding.zh.md: 2bc4a86b8b4d2e41bb155cf4f888126e2528bf85
 specs/web/ecc.md: 0a2e35d39431f4f4b014cc5a5e13bd5c27dc1722

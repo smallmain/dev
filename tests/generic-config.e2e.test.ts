@@ -3,9 +3,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import { distDir, repoRoot, runOxlint, testTimeoutMs } from "./cli-e2e-utils.ts";
+import {
+  distDir,
+  formatCommandFailure,
+  parseOxlintReport,
+  repoRoot,
+  runOxlint,
+  testTimeoutMs,
+} from "./cli-e2e-utils.ts";
 
-const missingDescriptionMessage = "directive comment without a description";
 const genericSpecifier = pathToFileURL(path.join(distDir, "oxlint/generic.js")).href;
 
 interface GenericFixture {
@@ -74,12 +80,20 @@ test(
         targets: ["src/missing.ts"],
       });
 
-      expect(
-        `${run.stdout}${run.stderr}`,
-        "the config must parse without rejecting relative JS plugin specifiers",
-      ).not.toContain("Relative JS plugin");
-      expect(run.exitCode, run.stdout || run.stderr).not.toBe(0);
-      expect(run.stdout).toContain(missingDescriptionMessage);
+      expect(run.timedOut, formatCommandFailure("oxlint --format json", run)).toBe(false);
+      expect(run.exitCode, formatCommandFailure("oxlint --format json", run)).not.toBe(0);
+      const report = parseOxlintReport(run);
+
+      expect(report.number_of_files).toBe(1);
+      expect(report.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "comments(require-description)",
+            filename: "src/missing.ts",
+            severity: "error",
+          }),
+        ]),
+      );
     });
   },
   testTimeoutMs,

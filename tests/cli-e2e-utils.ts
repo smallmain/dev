@@ -10,6 +10,19 @@ export interface CommandResult {
   timedOut: boolean;
 }
 
+export interface OxlintDiagnostic {
+  code: string;
+  filename: string;
+  labels: { span: { column: number; length: number; line: number; offset: number } }[];
+  message: string;
+  severity: string;
+}
+
+export interface OxlintJsonReport {
+  diagnostics: OxlintDiagnostic[];
+  number_of_files: number;
+}
+
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const cliPath = path.join(repoRoot, "dist/npm/dev/bin/sm.js");
 export const distDir = path.join(repoRoot, "dist/npm/dev");
@@ -42,7 +55,7 @@ export async function runCommand(
   try {
     const result = await spawn(command, args, {
       cwd: options.cwd,
-      env: { CI: "1", ...options.env },
+      env: { ...options.env, CI: "1" },
       signal: abortController.signal,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -93,6 +106,22 @@ export function formatCommandFailure(command: string, result: CommandResult): st
     "stderr:",
     result.stderr,
   ].join("\n");
+}
+
+export function parseCommandJson<T>(command: string, result: CommandResult): T {
+  return parseJson<T>(result.stdout, formatCommandFailure(command, result));
+}
+
+export function parseJson<T>(content: string, context: string): T {
+  try {
+    return JSON.parse(content) as T;
+  } catch (error) {
+    throw new Error(`${context}\nExpected valid JSON output.`, { cause: error });
+  }
+}
+
+export function parseOxlintReport(result: CommandResult): OxlintJsonReport {
+  return parseCommandJson<OxlintJsonReport>("oxlint --format json", result);
 }
 
 export function createGitEnv(homeDir: string, extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

@@ -3,9 +3,19 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "vitest";
-import { distDir, runOxlint, testTimeoutMs } from "./cli-e2e-utils.ts";
+import {
+  type CommandResult,
+  distDir,
+  formatCommandFailure,
+  type OxlintJsonReport,
+  parseOxlintReport,
+  runOxlint,
+  testTimeoutMs,
+} from "./cli-e2e-utils.ts";
 
 const pluginPath = path.join(distDir, "oxlint/plugins/consistent-esm-default-name.js");
+const importRuleCode = "consistent-esm-default-name(default-import-name)";
+const exportRuleCode = "consistent-esm-default-name(default-export-name)";
 
 interface PluginFixture {
   cwd: string;
@@ -269,28 +279,29 @@ test(
         targets: ["src/imports.tsx"],
       });
 
-      expect(run.exitCode).not.toBe(0);
-      expect(run.stdout, "package default export declaration should win").toContain("styled");
-      expect(run.stdout, "anonymous package default should fall back to package name").toContain(
-        "fooBar",
+      const report = parseFailedOxlintReport(run);
+      const expectedImports = [
+        ["badStyled", "styled", "styled-components"],
+        ["badFooBar", "fooBar", "foo-bar"],
+        ["badUi", "UI", "@scope/ui"],
+        ["badScopedButton", "Button", "@scope/ui/button"],
+        ["badKebab", "UserService", "./user-service"],
+        ["badAnon", "anonymousDefault", "./anonymous-default"],
+        ["badLeadingDigit", "_123abc", "./123abc"],
+        ["badReExport", "targetName", "./re-export"],
+        ["badIndex", "wrongName", "./components/Button/index"],
+        ["badDir", "sourcePackage", "."],
+        ["badSubpath", "merge", "lodash/merge"],
+      ];
+
+      expectDiagnostics(
+        report,
+        importRuleCode,
+        expectedImports.map(([actual, expected, specifier]) => ({
+          filename: "src/imports.tsx",
+          message: `Default import name '${actual}' should be '${expected}' for '${specifier}'.`,
+        })),
       );
-      expect(run.stdout, "scoped package default export declaration should win").toContain("UI");
-      expect(run.stdout, "package subpath default export declaration should win").toContain(
-        "Button",
-      );
-      expect(run.stdout, "relative import should use target default export declaration").toContain(
-        "UserService",
-      );
-      expect(
-        run.stdout,
-        "anonymous relative default should fall back to module specifier",
-      ).toContain("anonymousDefault");
-      expect(run.stdout, "invalid identifier start should be prefixed").toContain("_123abc");
-      expect(run.stdout, "default re-export should follow target module").toContain("targetName");
-      expect(run.stdout, "directory import should use target package name").toContain(
-        "sourcePackage",
-      );
-      expect(run.stdout, "package subpath should be checked").toContain("merge");
     });
   },
   testTimeoutMs,
@@ -306,21 +317,21 @@ test(
         targets: ["src/custom.ts"],
       });
 
-      expect(run.exitCode).not.toBe(0);
-      expect(run.stdout, "target default export should win over template").toContain("Wrong");
-      expect(run.stdout, "target default export should win over suffix template").toContain(
-        "wrongName",
-      );
-      expect(run.stdout, "fixed name template should be applied").toContain("fixedName");
-      expect(run.stdout, "prefix should be applied").toContain("useCounter");
-      expect(run.stdout, "custom ignored virtual specifier should be ignored").not.toContain(
-        "virtual:routes",
-      );
-      expect(run.stdout, "custom ignored raw specifier should be ignored").not.toContain(
-        "README.md?raw",
-      );
-      expect(run.stdout, "custom ignored target path should be ignored").not.toContain(
-        "generated/client",
+      const report = parseFailedOxlintReport(run);
+      const expectedImports = [
+        ["badReact", "Wrong", "./Button.react.tsx"],
+        ["badService", "wrongName", "./user.service.ts"],
+        ["badFixed", "fixedName", "./whatever.fixed.ts"],
+        ["badPrefix", "useCounter", "./counter.prefix.ts"],
+      ];
+
+      expectDiagnostics(
+        report,
+        importRuleCode,
+        expectedImports.map(([actual, expected, specifier]) => ({
+          filename: "src/custom.ts",
+          message: `Default import name '${actual}' should be '${expected}' for '${specifier}'.`,
+        })),
       );
     });
   },
@@ -344,19 +355,21 @@ test(
         ],
       });
 
-      expect(run.exitCode).not.toBe(0);
-      expect(run.stdout, "export template suffix should be applied").toContain(
-        "UserServiceService",
-      );
-      expect(run.stdout, "index export should expect parent directory").toContain("Button");
-      expect(run.stdout, "anonymous and call expression exports should be ignored").not.toContain(
-        "anonymous.ts",
-      );
-      expect(run.stdout, "call expression exports should be ignored").not.toContain(
-        "call-expression.ts",
-      );
-      expect(run.stdout, "custom ignored export path should be ignored").not.toContain(
-        "generated/client.ts",
+      const report = parseFailedOxlintReport(run);
+      const expectedExports = [
+        ["src/user.service.ts", "wrongName", "UserServiceService"],
+        ["src/Button.react.tsx", "Wrong", "Button"],
+        ["src/components/Button/index.ts", "wrongName", "button"],
+      ];
+
+      expect(report.number_of_files).toBe(6);
+      expectDiagnostics(
+        report,
+        exportRuleCode,
+        expectedExports.map(([filename, actual, expected]) => ({
+          filename,
+          message: `Default export name '${actual}' should be '${expected}' for this file.`,
+        })),
       );
     });
   },
@@ -374,7 +387,7 @@ test(
         targets: ["src/fix-safe.ts"],
       });
 
-      expect(fixRun.exitCode, "safe fixer should fix all issues").toBe(0);
+      expectSuccessfulOxlintReport(fixRun);
       const fixedSafe = await readFile(path.join(cwd, "src/fix-safe.ts"), "utf8");
       expect(fixedSafe, "safe fixer should rename import binding").toContain("import UserService");
       expect(fixedSafe, "safe fixer should rename references").toContain(
@@ -388,7 +401,7 @@ test(
         targets: ["src/fix-fallback.ts"],
       });
 
-      expect(fixFallbackRun.exitCode, "fallback safe fixer should fix all issues").toBe(0);
+      expectSuccessfulOxlintReport(fixFallbackRun);
       const fixedFallback = await readFile(path.join(cwd, "src/fix-fallback.ts"), "utf8");
       expect(fixedFallback, "fallback safe fixer should use TypeScript fallback name").toContain(
         "import anonymousDefault",
@@ -401,10 +414,14 @@ test(
         targets: ["src/fix-unsafe.ts"],
       });
 
-      expect(
-        unsafeRun.exitCode,
-        "unsafe fixer should keep reporting when a name conflicts",
-      ).not.toBe(0);
+      const unsafeReport = parseFailedOxlintReport(unsafeRun);
+
+      expectDiagnostics(unsafeReport, importRuleCode, [
+        {
+          filename: "src/fix-unsafe.ts",
+          message: "Default import name 'wrong' should be 'UserService' for './user-service'.",
+        },
+      ]);
       const fixedUnsafe = await readFile(path.join(cwd, "src/fix-unsafe.ts"), "utf8");
       expect(fixedUnsafe, "unsafe fixer should not rename conflicting binding").toContain(
         "import wrong",
@@ -430,7 +447,7 @@ test(
         ],
       });
 
-      expect(fixRun.exitCode, fixRun.stdout || fixRun.stderr).toBe(0);
+      expectSuccessfulOxlintReport(fixRun);
 
       const fixedClass = await readFile(path.join(cwd, "src/ExportClass.ts"), "utf8");
       expect(fixedClass).toContain("export default class ExportClass");
@@ -458,7 +475,15 @@ test(
         targets: ["src/export-conflict.ts"],
       });
 
-      expect(conflictRun.exitCode, "conflicting export rename should keep reporting").not.toBe(0);
+      const conflictReport = parseFailedOxlintReport(conflictRun);
+
+      expect(conflictReport.diagnostics).toEqual([
+        expect.objectContaining({
+          code: exportRuleCode,
+          filename: "src/export-conflict.ts",
+          severity: "error",
+        }),
+      ]);
       const conflictedExport = await readFile(path.join(cwd, "src/export-conflict.ts"), "utf8");
       expect(conflictedExport).toContain("export default wrongConflict;");
     });
@@ -476,7 +501,7 @@ test(
         targets: ["src/cache-import.ts"],
       });
 
-      expect(warmRun.exitCode, "cache warm fixture should pass before target changes").toBe(0);
+      expectSuccessfulOxlintReport(warmRun);
 
       await writeFixture(cwd, "src/cache-target.ts", "export default function Beta() {}\n");
 
@@ -486,15 +511,45 @@ test(
         targets: ["src/cache-import.ts"],
       });
 
-      expect(
-        invalidationRun.exitCode,
-        "target source changes should invalidate parsed module cache",
-      ).not.toBe(0);
-      expect(
-        invalidationRun.stdout,
-        "cache invalidation should report the new default export name",
-      ).toContain("Beta");
+      const report = parseFailedOxlintReport(invalidationRun);
+
+      expectDiagnostics(report, importRuleCode, [
+        {
+          filename: "src/cache-import.ts",
+          message: "Default import name 'Alpha' should be 'Beta' for './cache-target'.",
+        },
+      ]);
     });
   },
   testTimeoutMs,
 );
+
+function parseFailedOxlintReport(result: CommandResult): OxlintJsonReport {
+  expect(result.timedOut, formatCommandFailure("oxlint --format json", result)).toBe(false);
+  expect(result.exitCode, formatCommandFailure("oxlint --format json", result)).not.toBe(0);
+
+  return parseOxlintReport(result);
+}
+
+function expectSuccessfulOxlintReport(result: CommandResult): void {
+  expect(result, formatCommandFailure("oxlint --format json", result)).toMatchObject({
+    exitCode: 0,
+    timedOut: false,
+  });
+  expect(parseOxlintReport(result).diagnostics).toEqual([]);
+}
+
+function expectDiagnostics(
+  report: OxlintJsonReport,
+  code: string,
+  expected: { filename: string; message: string }[],
+): void {
+  expect(report.diagnostics).toHaveLength(expected.length);
+  expect(report.diagnostics).toEqual(
+    expect.arrayContaining(
+      expected.map(diagnostic =>
+        expect.objectContaining({ ...diagnostic, code, severity: "error" }),
+      ),
+    ),
+  );
+}

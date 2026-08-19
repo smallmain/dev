@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
@@ -6,8 +6,11 @@ import {
   cliPath,
   distDir,
   formatCommandFailure,
+  parseJson,
+  parseOxlintReport,
   repoRoot,
   runCommand,
+  runOxlint,
   testTimeoutMs,
 } from "./cli-e2e-utils.ts";
 
@@ -17,6 +20,23 @@ const symlinkDirType = process.platform === "win32" ? "junction" : "dir";
 interface InstalledProject {
   projectDir: string;
   env: NodeJS.ProcessEnv;
+}
+
+interface StylelintJsonResult {
+  deprecations?: unknown[];
+  invalidOptionWarnings?: unknown[];
+  parseErrors?: unknown[];
+  warnings?: unknown[];
+}
+
+interface VitestJsonReport {
+  numFailedTests: number;
+  numPassedTests: number;
+  numPendingTests: number;
+  numTodoTests: number;
+  numTotalTests: number;
+  success: boolean;
+  testResults: { status: "failed" | "passed" }[];
 }
 
 // Recreates a realistic post-install layout without hitting the network: the
@@ -42,6 +62,14 @@ async function withInstalledProject(
     await symlink(
       distDir,
       path.join(projectDir, "node_modules", "@smallmains", "dev"),
+      symlinkDirType,
+    );
+    // Type-aware linting resolves test imports from the generated project's
+    // installation, so mirror the direct Vitest dependency instead of relying
+    // on the parent fixture's hoisted dependency fallback.
+    await symlink(
+      path.join(repoRoot, "node_modules/vitest"),
+      path.join(projectDir, "node_modules/vitest"),
       symlinkDirType,
     );
 
@@ -80,9 +108,18 @@ async function createFakePackageManagers(dir: string): Promise<string> {
   return fakeBinDir;
 }
 
-const variants: { label: string; args: string[]; runTests?: boolean }[] = [
+const variants: {
+  label: string;
+  args: string[];
+  runStylelint?: boolean;
+  runTests?: boolean;
+}[] = [
   { label: "default", args: [], runTests: true },
-  { label: "css-modules", args: ["--component", "css", "--css", "css-modules"] },
+  {
+    label: "css-modules",
+    args: ["--component", "css", "--css", "css-modules"],
+    runStylelint: true,
+  },
 ];
 
 for (const variant of variants) {
@@ -106,16 +143,29 @@ for (const variant of variants) {
           env,
           timeoutMs: testTimeoutMs,
         });
-        const output = `${check.stdout}${check.stderr}`;
 
-        expect(check.exitCode, formatCommandFailure("sm check", check)).toBe(0);
-        expect(output).not.toContain("Format issues");
-        expect(output.toLowerCase(), output).not.toContain("warning");
+        expect(check, formatCommandFailure("sm check", check)).toMatchObject({
+          exitCode: 0,
+          timedOut: false,
+        });
+        await expectNoOxlintDiagnostics(projectDir);
+
+        if (variant.runStylelint) {
+          await expectNoStylelintDiagnostics(projectDir, env);
+        }
 
         if (variant.runTests) {
+          const reportPath = path.join(projectDir, ".vitest-report.json");
           const testRun = await runCommand(
             process.execPath,
-            [path.join(repoRoot, "node_modules/vitest/vitest.mjs"), "run"],
+            [
+              path.join(repoRoot, "node_modules/vitest/vitest.mjs"),
+              "run",
+              "--reporter",
+              "json",
+              "--outputFile",
+              reportPath,
+            ],
             { cwd: projectDir, env, timeoutMs: testTimeoutMs },
           );
 
@@ -123,7 +173,21 @@ for (const variant of variants) {
             exitCode: 0,
             timedOut: false,
           });
-          expect(`${testRun.stdout}${testRun.stderr}`).toContain("Tests  2 passed");
+          const report = parseJson<VitestJsonReport>(
+            await readFile(reportPath, "utf8"),
+            `Vitest JSON report: ${reportPath}`,
+          );
+
+          expect(report).toMatchObject({
+            numFailedTests: 0,
+            numPassedTests: 2,
+            numPendingTests: 0,
+            numTodoTests: 0,
+            numTotalTests: 2,
+            success: true,
+          });
+          expect(report.testResults).toHaveLength(2);
+          expect(report.testResults.every(result => result.status === "passed")).toBe(true);
           expect((await stat(path.join(projectDir, "coverage"))).isDirectory()).toBe(true);
         }
       });
@@ -155,3 +219,58 @@ test(
   },
   testTimeoutMs,
 );
+
+async function expectNoOxlintDiagnostics(projectDir: string): Promise<void> {
+  const result = await runOxlint({
+    configPath: path.join(projectDir, "oxlint.config.ts"),
+    cwd: projectDir,
+    targets: ["."],
+  });
+
+  expect(result, formatCommandFailure("oxlint --format json", result)).toMatchObject({
+    exitCode: 0,
+    timedOut: false,
+  });
+  const report = parseOxlintReport(result);
+
+  expect(report.number_of_files).toBeGreaterThan(0);
+  expect(report.diagnostics).toEqual([]);
+}
+
+async function expectNoStylelintDiagnostics(
+  projectDir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const reportPath = path.join(projectDir, ".stylelint-report.json");
+  const result = await runCommand(
+    process.execPath,
+    [
+      path.join(repoRoot, "node_modules/stylelint/bin/stylelint.mjs"),
+      "--allow-empty-input",
+      "--formatter",
+      "json",
+      "--output-file",
+      reportPath,
+      "**/*.{css,scss,sass,less,pcss,html,ejs,vue,svelte,astro,md,mdx}",
+    ],
+    { cwd: projectDir, env, timeoutMs: testTimeoutMs },
+  );
+
+  expect(result, formatCommandFailure("stylelint --formatter json", result)).toMatchObject({
+    exitCode: 0,
+    timedOut: false,
+  });
+  const report = parseJson<StylelintJsonResult[]>(
+    await readFile(reportPath, "utf8"),
+    `Stylelint JSON report: ${reportPath}`,
+  );
+  const diagnostics = report.flatMap(file => [
+    ...(file.deprecations ?? []),
+    ...(file.invalidOptionWarnings ?? []),
+    ...(file.parseErrors ?? []),
+    ...(file.warnings ?? []),
+  ]);
+
+  expect(report.length).toBeGreaterThan(0);
+  expect(diagnostics).toEqual([]);
+}
