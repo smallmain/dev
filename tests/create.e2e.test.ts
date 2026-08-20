@@ -59,7 +59,7 @@ test(
         name?: string;
         scripts?: Record<string, string>;
         devDependencies?: Record<string, string>;
-        devEngines?: { packageManager?: { name?: string } };
+        devEngines?: { packageManager?: { name?: string; version?: string } };
         engines?: { node?: string };
       }>(path.join(projectDir, "package.json"));
       const extensionsJson = await readJson<{ recommendations?: string[] }>(
@@ -83,6 +83,7 @@ test(
       expect(packageJson.devDependencies).not.toHaveProperty("stylelint");
       expect(packageJson.devDependencies).not.toHaveProperty("@types/node");
       expect(packageJson.devEngines?.packageManager?.name).toBe("pnpm");
+      expect(packageJson.devEngines?.packageManager?.version).toBe("11");
       expect(packageJson.engines).toBeUndefined();
       expect(extensionsJson.recommendations).toContain("vitest.explorer");
       expect(extensionsJson.recommendations).not.toContain("stylelint.vscode-stylelint");
@@ -155,7 +156,7 @@ test(
           name?: string;
           scripts?: Record<string, string>;
           devDependencies?: Record<string, string>;
-          devEngines?: { packageManager?: { name?: string } };
+          devEngines?: { packageManager?: { name?: string; version?: string } };
           engines?: { node?: string };
         }>(path.join(projectDir, "package.json"));
         const stylelintConfig = await readFile(
@@ -186,6 +187,7 @@ test(
           packageJson.devDependencies?.vitest,
         );
         expect(packageJson.devEngines?.packageManager?.name).toBe("npm");
+        expect(packageJson.devEngines?.packageManager?.version).toBe("11");
         expect(packageJson.engines?.node).toBe("^24");
         expect(stylelintConfig).toContain("@smallmains/dev/stylelint/css-modules.js");
         expect(stylelintConfig).toContain(
