@@ -43,7 +43,7 @@ export async function buildCli(): Promise<void> {
 export async function runCommand(
   command: string,
   args: string[],
-  options: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number },
+  options: { cwd: string; env?: NodeJS.ProcessEnv; stdin?: string; timeoutMs: number },
 ): Promise<CommandResult> {
   const abortController = new AbortController();
   let timedOut = false;
@@ -57,7 +57,9 @@ export async function runCommand(
       cwd: options.cwd,
       env: { ...options.env, CI: "1" },
       signal: abortController.signal,
-      stdio: ["ignore", "pipe", "pipe"],
+      stderr: "pipe",
+      stdin: options.stdin === undefined ? "ignore" : { string: options.stdin },
+      stdout: "pipe",
     });
 
     return {

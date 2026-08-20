@@ -2,9 +2,15 @@ import { access, copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/p
 import path from "node:path";
 import { stdin, stdout } from "node:process";
 import { emitKeypressEvents } from "node:readline";
+import { createInterface } from "node:readline/promises";
 import ejs from "ejs";
 import { runCheckOrThrow } from "./check.ts";
-import { commandSucceeds, runCommandOrThrow } from "./command-utils.ts";
+import {
+  commandSucceeds,
+  runCommand,
+  runCommandOrThrow,
+  type SpawnResult,
+} from "./command-utils.ts";
 import {
   getAuthor,
   getDependencyVersion,
@@ -65,6 +71,11 @@ type Runtime = "neutral" | "browser" | "nodejs";
 type CssComponent = "native" | "css-modules" | "tailwind";
 type PackageManager = "npm" | "pnpm";
 type Component = "git-hook" | "react" | "css" | "security";
+
+interface InstallRetryReader {
+  answers: AsyncIterator<string>;
+  readline: ReturnType<typeof createInterface>;
+}
 
 type FormField =
   | "preset"
@@ -153,19 +164,74 @@ export async function runCreateCommand(
     await renderTemplateDirectory(webNpmPackageCssTemplateDir, targetDir, templateValues);
   }
 
-  console.log(`Installing dependencies with ${context.packageManager}...`);
-  await runCommandOrThrow(context.packageManager, ["install"], { cwd: targetDir });
+  await installDependencies(context.packageManager, targetDir, options.yes !== true);
 
-  await fixProject(targetDir);
+  await fixProject();
 
   console.log(`Created ${context.packageName} in ${targetDir}`);
 }
 
-async function fixProject(targetDir: string): Promise<void> {
-  if (!(await pathExists(path.join(targetDir, "node_modules", "@smallmains", "dev")))) {
-    return;
+async function installDependencies(
+  packageManager: PackageManager,
+  targetDir: string,
+  retryPromptEnabled: boolean,
+): Promise<void> {
+  let retryReader: InstallRetryReader | undefined;
+  let retry = false;
+
+  try {
+    while (true) {
+      console.log(`${retry ? "Retrying" : "Installing"} dependencies with ${packageManager}...`);
+      const result = await runCommand(packageManager, ["install"], { cwd: targetDir });
+
+      if (result.code === 0) {
+        return;
+      }
+
+      const error = createInstallError(packageManager, result);
+
+      if (!retryPromptEnabled || result.signal || !stdin.isTTY || !stdout.isTTY) {
+        throw error;
+      }
+
+      retryReader ??= createInstallRetryReader();
+
+      if (!(await confirmInstallRetry(retryReader.answers))) {
+        throw error;
+      }
+
+      retry = true;
+    }
+  } finally {
+    retryReader?.readline.close();
+  }
+}
+
+function createInstallRetryReader(): InstallRetryReader {
+  const readline = createInterface({ input: stdin, output: stdout });
+
+  return {
+    answers: readline[Symbol.asyncIterator](),
+    readline,
+  };
+}
+
+async function confirmInstallRetry(answers: AsyncIterator<string>): Promise<boolean> {
+  stdout.write("Retry dependency installation? [y/N] ");
+  const answer = await answers.next();
+
+  return !answer.done && /^(?:y|yes)$/iu.test(answer.value.trim());
+}
+
+function createInstallError(packageManager: PackageManager, result: SpawnResult): Error {
+  if (result.signal) {
+    return new Error(`${packageManager} install terminated by ${result.signal}.`);
   }
 
+  return new Error(`${packageManager} install exited with code ${result.code}.`);
+}
+
+async function fixProject(): Promise<void> {
   console.log("Fixing and formatting files...");
   await runCheckOrThrow([], { fix: true });
 }

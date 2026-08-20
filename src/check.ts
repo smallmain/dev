@@ -1,9 +1,10 @@
 import { readFile, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import lintCommitMessage from "@commitlint/lint";
 import loadCommitlintConfig from "@commitlint/load";
 import type { LintOptions } from "@commitlint/types";
-import { isCommandAvailable, readCommandOutput, runCommand } from "./command-utils.ts";
+import { readCommandOutput, runCommand } from "./command-utils.ts";
 import { packageRootDir } from "./package-info.ts";
 
 interface RawCheckOptions {
@@ -29,38 +30,6 @@ interface CheckRunner {
   args: string[];
 }
 
-const oxlintConfigFiles = [
-  "oxlint.config.js",
-  "oxlint.config.mjs",
-  "oxlint.config.cjs",
-  "oxlint.config.ts",
-  ".oxlintrc.json",
-  ".oxlintrc.jsonc",
-];
-const stylelintConfigFiles = [
-  "stylelint.config.js",
-  "stylelint.config.mjs",
-  "stylelint.config.cjs",
-  "stylelint.config.ts",
-  ".stylelintrc",
-  ".stylelintrc.json",
-  ".stylelintrc.yaml",
-  ".stylelintrc.yml",
-  ".stylelintrc.js",
-  ".stylelintrc.mjs",
-  ".stylelintrc.cjs",
-  ".stylelintrc.ts",
-];
-const oxfmtConfigFiles = [
-  "oxfmt.config.js",
-  "oxfmt.config.mjs",
-  "oxfmt.config.cjs",
-  "oxfmt.config.ts",
-  "oxfmt.config.mts",
-  "oxfmt.config.cts",
-  ".oxfmtrc.json",
-  ".oxfmtrc.jsonc",
-];
 const stylelintDefaultPatterns = [
   "**/*.{css,scss,sass,less,pcss,html,ejs,vue,svelte,astro,md,mdx}",
 ];
@@ -136,8 +105,8 @@ export async function runCheckCommitMessageCommand(
 async function runLintCheck(files: string[], options: RawLintOptions): Promise<number> {
   const cwd = process.cwd();
   const runners = [
-    await createOxlintRunner(cwd, files, options),
-    await createStylelintRunner(cwd, files, options),
+    createOxlintRunner(cwd, files, options),
+    createStylelintRunner(cwd, files, options),
   ].filter((runner): runner is CheckRunner => runner !== undefined);
 
   return runRunners(cwd, runners);
@@ -145,7 +114,7 @@ async function runLintCheck(files: string[], options: RawLintOptions): Promise<n
 
 async function runFormatCheck(files: string[], options: RawFormatOptions): Promise<number> {
   const cwd = process.cwd();
-  const runner = await createOxfmtRunner(cwd, files, options);
+  const runner = createOxfmtRunner(cwd, files, options);
 
   return runner ? runRunners(cwd, [runner]) : 0;
 }
@@ -202,15 +171,12 @@ async function lintCommitMessageText(message: string): Promise<boolean> {
   return result.valid;
 }
 
-async function createOxlintRunner(
+function createOxlintRunner(
   cwd: string,
   files: string[],
   options: RawLintOptions,
-): Promise<CheckRunner | undefined> {
-  if (
-    !(await isCommandAvailable("oxlint", { cwd, preferLocal: true })) ||
-    !(await usesTool(cwd, oxlintConfigFiles, "oxlint"))
-  ) {
+): CheckRunner | undefined {
+  if (!isPackageInstalled(cwd, "oxlint")) {
     return undefined;
   }
 
@@ -220,15 +186,12 @@ async function createOxlintRunner(
   };
 }
 
-async function createStylelintRunner(
+function createStylelintRunner(
   cwd: string,
   files: string[],
   options: RawLintOptions,
-): Promise<CheckRunner | undefined> {
-  if (
-    !(await isCommandAvailable("stylelint", { cwd, preferLocal: true })) ||
-    !(await usesTool(cwd, stylelintConfigFiles, "stylelint"))
-  ) {
+): CheckRunner | undefined {
+  if (!isPackageInstalled(cwd, "stylelint")) {
     return undefined;
   }
 
@@ -245,15 +208,12 @@ async function createStylelintRunner(
   };
 }
 
-async function createOxfmtRunner(
+function createOxfmtRunner(
   cwd: string,
   files: string[],
   options: RawFormatOptions,
-): Promise<CheckRunner | undefined> {
-  if (
-    !(await isCommandAvailable("oxfmt", { cwd, preferLocal: true })) ||
-    !(await usesTool(cwd, oxfmtConfigFiles, "oxfmt"))
-  ) {
+): CheckRunner | undefined {
+  if (!isPackageInstalled(cwd, "oxfmt")) {
     return undefined;
   }
 
@@ -326,34 +286,19 @@ function parseGitDirFile(content: string): string | undefined {
   return match?.groups?.gitDir;
 }
 
-async function usesTool(
-  cwd: string,
-  configFiles: string[],
-  packageJsonField: string,
-): Promise<boolean> {
-  for (const configFile of configFiles) {
-    if (await fileExists(path.join(cwd, configFile))) {
-      return true;
-    }
-  }
+function isPackageInstalled(cwd: string, packageName: string): boolean {
+  const require = createRequire(path.join(cwd, "package.json"));
 
   try {
-    const packageJson = JSON.parse(
-      await readFile(path.join(cwd, "package.json"), "utf8"),
-    ) as Record<string, unknown>;
-
-    return packageJson[packageJsonField] !== undefined;
+    require.resolve(`${packageName}/package.json`);
+    return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((error as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND") {
       return false;
     }
 
     throw error;
   }
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  return (await statOptional(filePath)) !== undefined;
 }
 
 async function statOptional(

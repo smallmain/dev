@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   program
     .command("create")
     .description("Create a project in the current working directory.")
-    .option("-y, --yes", "Use defaults and skip prompts.")
+    .option("-y, --yes", "Use defaults and skip the interactive interface.")
     .option("--name <name>", "Package Name.")
     .option("--description <description>", "Package Description.")
     .option("--zh-name <name>", "Chinese display name.")

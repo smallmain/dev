@@ -1,10 +1,8 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "vitest";
 import {
   cliPath,
-  distDir,
   formatCommandFailure,
   parseJson,
   parseOxlintReport,
@@ -13,14 +11,9 @@ import {
   runOxlint,
   testTimeoutMs,
 } from "./cli-e2e-utils.ts";
+import { withInstalledCreateProject } from "./create-e2e-utils.ts";
 
 const pathEnvKey = process.platform === "win32" ? "Path" : "PATH";
-const symlinkDirType = process.platform === "win32" ? "junction" : "dir";
-
-interface InstalledProject {
-  projectDir: string;
-  env: NodeJS.ProcessEnv;
-}
 
 interface StylelintJsonResult {
   deprecations?: unknown[];
@@ -37,75 +30,6 @@ interface VitestJsonReport {
   numTotalTests: number;
   success: boolean;
   testResults: { status: "failed" | "passed" }[];
-}
-
-// Recreates a realistic post-install layout without hitting the network: the
-// freshly built package is linked as `@smallmains/dev`, and the repo's own
-// dependencies are resolvable from a parent `node_modules` (so plugins declared
-// by the shared configs, e.g. `@e18e/eslint-plugin`, resolve). Package-manager
-// installs are stubbed so `sm create` does not perform a real install.
-async function withInstalledProject(
-  run: (project: InstalledProject) => Promise<void>,
-): Promise<void> {
-  const workDir = await mkdtemp(path.join(tmpdir(), "sm-create-check-e2e-"));
-  let passed = false;
-
-  try {
-    await symlink(
-      path.join(repoRoot, "node_modules"),
-      path.join(workDir, "node_modules"),
-      symlinkDirType,
-    );
-
-    const projectDir = path.join(workDir, "project");
-    await mkdir(path.join(projectDir, "node_modules", "@smallmains"), { recursive: true });
-    await symlink(
-      distDir,
-      path.join(projectDir, "node_modules", "@smallmains", "dev"),
-      symlinkDirType,
-    );
-    // Type-aware linting resolves test imports from the generated project's
-    // installation, so mirror the direct Vitest dependency instead of relying
-    // on the parent fixture's hoisted dependency fallback.
-    await symlink(
-      path.join(repoRoot, "node_modules/vitest"),
-      path.join(projectDir, "node_modules/vitest"),
-      symlinkDirType,
-    );
-
-    const fakeBinDir = await createFakePackageManagers(workDir);
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      [pathEnvKey]: [fakeBinDir, process.env[pathEnvKey] ?? ""]
-        .filter(Boolean)
-        .join(path.delimiter),
-    };
-
-    await run({ projectDir, env });
-    passed = true;
-  } finally {
-    if (!passed || process.env.KEEP_TEST_TEMP === "1") {
-      console.info(`Kept create-check e2e temp directory: ${workDir}`);
-    } else {
-      await rm(workDir, { force: true, recursive: true });
-    }
-  }
-}
-
-async function createFakePackageManagers(dir: string): Promise<string> {
-  const fakeBinDir = path.join(dir, ".fake-bin");
-
-  await mkdir(fakeBinDir, { recursive: true });
-  await Promise.all(
-    ["npm", "pnpm"].map(async packageManager => {
-      const filePath = path.join(fakeBinDir, packageManager);
-
-      await writeFile(filePath, "#!/bin/sh\ntrue\n");
-      await chmod(filePath, 0o755);
-    }),
-  );
-
-  return fakeBinDir;
 }
 
 const variants: {
@@ -126,71 +50,89 @@ for (const variant of variants) {
   test(
     `the ${variant.label} scaffold passes sm check out of the box`,
     async () => {
-      await withInstalledProject(async ({ projectDir, env }) => {
-        const create = await runCommand(
-          process.execPath,
-          [cliPath, "create", "--yes", ...variant.args],
-          { cwd: projectDir, env, timeoutMs: testTimeoutMs },
-        );
+      await withInstalledCreateProject(
+        async ({ projectDir, env }) => {
+          const existingFormatPath = path.join(projectDir, "existing-format.ts");
 
-        expect(create, formatCommandFailure("sm create --yes", create)).toMatchObject({
-          exitCode: 0,
-          timedOut: false,
-        });
-
-        const check = await runCommand(process.execPath, [cliPath, "check"], {
-          cwd: projectDir,
-          env,
-          timeoutMs: testTimeoutMs,
-        });
-
-        expect(check, formatCommandFailure("sm check", check)).toMatchObject({
-          exitCode: 0,
-          timedOut: false,
-        });
-        await expectNoOxlintDiagnostics(projectDir);
-
-        if (variant.runStylelint) {
-          await expectNoStylelintDiagnostics(projectDir, env);
-        }
-
-        if (variant.runTests) {
-          const reportPath = path.join(projectDir, ".vitest-report.json");
-          const testRun = await runCommand(
+          await writeFile(existingFormatPath, "export const values=[1,2,3]\n");
+          const create = await runCommand(
             process.execPath,
-            [
-              path.join(repoRoot, "node_modules/vitest/vitest.mjs"),
-              "run",
-              "--reporter",
-              "json",
-              "--outputFile",
-              reportPath,
-            ],
+            [cliPath, "create", "--yes", ...variant.args],
             { cwd: projectDir, env, timeoutMs: testTimeoutMs },
           );
 
-          expect(testRun, formatCommandFailure("vitest run", testRun)).toMatchObject({
+          expect(create, formatCommandFailure("sm create --yes", create)).toMatchObject({
             exitCode: 0,
             timedOut: false,
           });
-          const report = parseJson<VitestJsonReport>(
-            await readFile(reportPath, "utf8"),
-            `Vitest JSON report: ${reportPath}`,
+          expect(
+            create.stdout.indexOf("Installing dependencies with pnpm..."),
+          ).toBeGreaterThanOrEqual(0);
+          expect(create.stdout.indexOf("Fixing and formatting files...")).toBeGreaterThan(
+            create.stdout.indexOf("Installing dependencies with pnpm..."),
+          );
+          expect(create.stdout.indexOf("Created ")).toBeGreaterThan(
+            create.stdout.indexOf("Fixing and formatting files..."),
+          );
+          await expect(readFile(existingFormatPath, "utf8")).resolves.toBe(
+            "export const values = [1, 2, 3];\n",
           );
 
-          expect(report).toMatchObject({
-            numFailedTests: 0,
-            numPassedTests: 2,
-            numPendingTests: 0,
-            numTodoTests: 0,
-            numTotalTests: 2,
-            success: true,
+          const check = await runCommand(process.execPath, [cliPath, "check"], {
+            cwd: projectDir,
+            env,
+            timeoutMs: testTimeoutMs,
           });
-          expect(report.testResults).toHaveLength(2);
-          expect(report.testResults.every(result => result.status === "passed")).toBe(true);
-          expect((await stat(path.join(projectDir, "coverage"))).isDirectory()).toBe(true);
-        }
-      });
+
+          expect(check, formatCommandFailure("sm check", check)).toMatchObject({
+            exitCode: 0,
+            timedOut: false,
+          });
+          await expectNoOxlintDiagnostics(projectDir);
+
+          if (variant.runStylelint) {
+            await expectNoStylelintDiagnostics(projectDir, env);
+          }
+
+          if (variant.runTests) {
+            const reportPath = path.join(projectDir, ".vitest-report.json");
+            const testRun = await runCommand(
+              process.execPath,
+              [
+                path.join(repoRoot, "node_modules/vitest/vitest.mjs"),
+                "run",
+                "--reporter",
+                "json",
+                "--outputFile",
+                reportPath,
+              ],
+              { cwd: projectDir, env, timeoutMs: testTimeoutMs },
+            );
+
+            expect(testRun, formatCommandFailure("vitest run", testRun)).toMatchObject({
+              exitCode: 0,
+              timedOut: false,
+            });
+            const report = parseJson<VitestJsonReport>(
+              await readFile(reportPath, "utf8"),
+              `Vitest JSON report: ${reportPath}`,
+            );
+
+            expect(report).toMatchObject({
+              numFailedTests: 0,
+              numPassedTests: 2,
+              numPendingTests: 0,
+              numTodoTests: 0,
+              numTotalTests: 2,
+              success: true,
+            });
+            expect(report.testResults).toHaveLength(2);
+            expect(report.testResults.every(result => result.status === "passed")).toBe(true);
+            expect((await stat(path.join(projectDir, "coverage"))).isDirectory()).toBe(true);
+          }
+        },
+        { stylelint: variant.runStylelint },
+      );
     },
     testTimeoutMs,
   );
@@ -199,7 +141,7 @@ for (const variant of variants) {
 test(
   "create fails when the generated project does not pass its final checks",
   async () => {
-    await withInstalledProject(async ({ projectDir, env }) => {
+    await withInstalledCreateProject(async ({ projectDir, env }) => {
       await mkdir(path.join(projectDir, "src"), { recursive: true });
       await writeFile(
         path.join(projectDir, "src/missing-description.ts"),
@@ -216,6 +158,233 @@ test(
       expect(create.stdout).not.toContain("Created ");
       expect(create.stderr).toContain("Project checks failed with exit code");
     });
+  },
+  testTimeoutMs,
+);
+
+test(
+  "create retries dependency installation until it succeeds",
+  async () => {
+    await withInstalledCreateProject(
+      async ({ env, installAttemptsPath, installLogPath, projectDir, ttyPreloadPath }) => {
+        const result = await runCommand(
+          process.execPath,
+          ["--import", ttyPreloadPath, cliPath, "create"],
+          {
+            cwd: projectDir,
+            env: {
+              ...env,
+              SM_CREATE_INSTALL_FAILURES: "2",
+              SM_CREATE_RETRY_MARKER: path.join(projectDir, "README.md"),
+              SM_CREATE_TTY_AFTER_FILE: path.join(projectDir, "package.json"),
+            },
+            stdin: "yes\ny\n",
+            timeoutMs: testTimeoutMs,
+          },
+        );
+
+        expect(result, formatCommandFailure("interactive sm create", result)).toMatchObject({
+          exitCode: 0,
+          timedOut: false,
+        });
+        await expect(readFile(installAttemptsPath, "utf8")).resolves.toBe("3\n");
+        await expect(readFile(installLogPath, "utf8")).resolves.toBe(
+          "pnpm install\npnpm install\npnpm install\n",
+        );
+        expect(countOccurrences(result.stdout, "Retry dependency installation? [y/N]")).toBe(2);
+        expect(countOccurrences(result.stdout, "Retrying dependencies with pnpm...")).toBe(2);
+        expect(result.stdout).toContain("Fixing and formatting files...");
+        expect(result.stdout).toContain("Created ");
+        await expect(readFile(path.join(projectDir, "README.md"), "utf8")).resolves.toContain(
+          "retry marker",
+        );
+      },
+    );
+  },
+  testTimeoutMs,
+);
+
+test(
+  "create stops when an installation retry is declined",
+  async () => {
+    await withInstalledCreateProject(
+      async ({ env, installAttemptsPath, projectDir, ttyPreloadPath }) => {
+        const result = await runCommand(
+          process.execPath,
+          ["--import", ttyPreloadPath, cliPath, "create"],
+          {
+            cwd: projectDir,
+            env: {
+              ...env,
+              SM_CREATE_INSTALL_FAILURES: "1",
+              SM_CREATE_TTY_AFTER_FILE: path.join(projectDir, "package.json"),
+            },
+            stdin: "n\n",
+            timeoutMs: testTimeoutMs,
+          },
+        );
+
+        expect(result.exitCode).not.toBe(0);
+        await expect(readFile(installAttemptsPath, "utf8")).resolves.toBe("1\n");
+        expect(result.stdout).toContain("Retry dependency installation? [y/N]");
+        expect(result.stdout).not.toContain("Fixing and formatting files...");
+        expect(result.stdout).not.toContain("Created ");
+        expect(result.stderr).toContain("pnpm install exited with code 17.");
+      },
+    );
+  },
+  testTimeoutMs,
+);
+
+test(
+  "create stops when the installation retry prompt is cancelled",
+  async () => {
+    await withInstalledCreateProject(
+      async ({ env, installAttemptsPath, projectDir, ttyPreloadPath }) => {
+        const result = await runCommand(
+          process.execPath,
+          ["--import", ttyPreloadPath, cliPath, "create"],
+          {
+            cwd: projectDir,
+            env: {
+              ...env,
+              SM_CREATE_INSTALL_FAILURES: "1",
+              SM_CREATE_TTY_AFTER_FILE: path.join(projectDir, "package.json"),
+            },
+            stdin: "",
+            timeoutMs: testTimeoutMs,
+          },
+        );
+
+        expect(result.exitCode).not.toBe(0);
+        await expect(readFile(installAttemptsPath, "utf8")).resolves.toBe("1\n");
+        expect(result.stdout).toContain("Retry dependency installation? [y/N]");
+        expect(result.stdout).not.toContain("Fixing and formatting files...");
+        expect(result.stdout).not.toContain("Created ");
+        expect(result.stderr).toContain("pnpm install exited with code 17.");
+      },
+    );
+  },
+  testTimeoutMs,
+);
+
+test(
+  "create --yes does not prompt after a retryable installation failure",
+  async () => {
+    await withInstalledCreateProject(
+      async ({ env, installAttemptsPath, projectDir, ttyPreloadPath }) => {
+        const result = await runCommand(
+          process.execPath,
+          ["--import", ttyPreloadPath, cliPath, "create", "--yes"],
+          {
+            cwd: projectDir,
+            env: { ...env, SM_CREATE_INSTALL_FAILURES: "1" },
+            stdin: "y\n",
+            timeoutMs: testTimeoutMs,
+          },
+        );
+
+        expect(result.exitCode).not.toBe(0);
+        await expect(readFile(installAttemptsPath, "utf8")).resolves.toBe("1\n");
+        expect(result.stdout).not.toContain("Retry dependency installation?");
+        expect(result.stdout).not.toContain("Fixing and formatting files...");
+        expect(result.stdout).not.toContain("Created ");
+        expect(result.stderr).toContain("pnpm install exited with code 17.");
+      },
+    );
+  },
+  testTimeoutMs,
+);
+
+test(
+  "create does not prompt after a non-interactive installation failure",
+  async () => {
+    await withInstalledCreateProject(async ({ env, installAttemptsPath, projectDir }) => {
+      const result = await runCommand(process.execPath, [cliPath, "create"], {
+        cwd: projectDir,
+        env: { ...env, SM_CREATE_INSTALL_FAILURES: "1" },
+        timeoutMs: testTimeoutMs,
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      await expect(readFile(installAttemptsPath, "utf8")).resolves.toBe("1\n");
+      expect(result.stdout).not.toContain("Retry dependency installation?");
+      expect(result.stdout).not.toContain("Fixing and formatting files...");
+      expect(result.stdout).not.toContain("Created ");
+      expect(result.stderr).toContain("pnpm install exited with code 17.");
+    });
+  },
+  testTimeoutMs,
+);
+
+test(
+  "create does not prompt after an interrupted installation",
+  async () => {
+    await withInstalledCreateProject(
+      async ({ env, installAttemptsPath, projectDir, ttyPreloadPath }) => {
+        const result = await runCommand(
+          process.execPath,
+          ["--import", ttyPreloadPath, cliPath, "create"],
+          {
+            cwd: projectDir,
+            env: {
+              ...env,
+              SM_CREATE_INSTALL_SIGNAL: "TERM",
+              SM_CREATE_TTY_AFTER_FILE: path.join(projectDir, "package.json"),
+            },
+            stdin: "y\n",
+            timeoutMs: testTimeoutMs,
+          },
+        );
+
+        expect(result.exitCode).not.toBe(0);
+        await expect(readFile(installAttemptsPath, "utf8")).resolves.toBe("1\n");
+        expect(result.stdout).not.toContain("Retry dependency installation?");
+        expect(result.stdout).not.toContain("Fixing and formatting files...");
+        expect(result.stdout).not.toContain("Created ");
+        expect(result.stderr).toContain("pnpm install terminated by SIGTERM.");
+      },
+    );
+  },
+  testTimeoutMs,
+);
+
+test(
+  "create does not prompt when the package-manager command cannot start",
+  async () => {
+    await withInstalledCreateProject(
+      async ({ env, fakeBinDir, installAttemptsPath, projectDir, ttyPreloadPath }) => {
+        const fakeGitPath = path.join(fakeBinDir, "git");
+
+        await writeFile(fakeGitPath, "#!/bin/sh\nexit 0\n");
+        await chmod(fakeGitPath, 0o755);
+        await unlink(path.join(fakeBinDir, "pnpm"));
+
+        const result = await runCommand(
+          process.execPath,
+          ["--import", ttyPreloadPath, cliPath, "create"],
+          {
+            cwd: projectDir,
+            env: {
+              ...env,
+              [pathEnvKey]: fakeBinDir,
+              SM_CREATE_TTY_AFTER_FILE: path.join(projectDir, "package.json"),
+            },
+            stdin: "y\n",
+            timeoutMs: testTimeoutMs,
+          },
+        );
+
+        expect(result.exitCode).not.toBe(0);
+        await expect(readFile(installAttemptsPath, "utf8")).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        expect(result.stdout).toContain("Installing dependencies with pnpm...");
+        expect(result.stdout).not.toContain("Retry dependency installation?");
+        expect(result.stdout).not.toContain("Fixing and formatting files...");
+        expect(result.stdout).not.toContain("Created ");
+      },
+    );
   },
   testTimeoutMs,
 );
@@ -273,4 +442,8 @@ async function expectNoStylelintDiagnostics(
 
   expect(report.length).toBeGreaterThan(0);
   expect(diagnostics).toEqual([]);
+}
+
+function countOccurrences(content: string, value: string): number {
+  return content.split(value).length - 1;
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
@@ -16,7 +16,15 @@ interface CheckFixture {
   path: typeof fixturePaths;
 }
 
+interface InstalledToolFixture {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  installed: boolean;
+  sourcePath: string;
+}
+
 const pathEnvKey = process.platform === "win32" ? "Path" : "PATH";
+const symlinkDirType = process.platform === "win32" ? "junction" : "dir";
 const fixturePaths = {
   badCss: "styles/bad.css",
   badFormat: "src/bad-format.ts",
@@ -57,6 +65,78 @@ test(
         exitCode: 0,
         timedOut: false,
       });
+    });
+  },
+  testTimeoutMs,
+);
+
+test(
+  "check runs installed Oxfmt with its default configuration",
+  async () => {
+    const originalSource = "export const values=[1,2,3]\n";
+
+    await withInstalledToolToggle("oxfmt", "value.ts", originalSource, async fixture => {
+      const result = await runSm(["check", "format", "--fix"], {
+        cwd: fixture.cwd,
+        env: fixture.env,
+      });
+
+      expect(result, formatCommandFailure("sm check format --fix", result)).toMatchObject({
+        exitCode: 0,
+        timedOut: false,
+      });
+      await expect(readFile(fixture.sourcePath, "utf8")).resolves.toBe(
+        fixture.installed ? "export const values = [1, 2, 3];\n" : originalSource,
+      );
+    });
+  },
+  testTimeoutMs,
+);
+
+test(
+  "check runs installed Oxlint with its default configuration",
+  async () => {
+    await withInstalledToolToggle(
+      "oxlint",
+      "invalid.ts",
+      "export const value = ;\n",
+      async fixture => {
+        const result = await runSm(["check", "lint", "invalid.ts"], {
+          cwd: fixture.cwd,
+          env: fixture.env,
+        });
+
+        if (fixture.installed) {
+          expectCommandFailed("sm check lint invalid.ts", result);
+        } else {
+          expect(result, formatCommandFailure("sm check lint invalid.ts", result)).toMatchObject({
+            exitCode: 0,
+            timedOut: false,
+          });
+        }
+      },
+    );
+  },
+  testTimeoutMs,
+);
+
+test(
+  "check runs installed Stylelint with its default configuration",
+  async () => {
+    await withInstalledToolToggle("stylelint", "invalid.css", ".invalid {\n", async fixture => {
+      const result = await runSm(["check", "lint", "invalid.css"], {
+        cwd: fixture.cwd,
+        env: fixture.env,
+      });
+
+      if (fixture.installed) {
+        expectCommandFailed("sm check lint invalid.css", result);
+      } else {
+        expect(result, formatCommandFailure("sm check lint invalid.css", result)).toMatchObject({
+          exitCode: 0,
+          timedOut: false,
+        });
+      }
     });
   },
   testTimeoutMs,
@@ -420,6 +500,35 @@ test(
   testTimeoutMs,
 );
 
+async function withInstalledToolToggle(
+  packageName: "oxfmt" | "oxlint" | "stylelint",
+  sourceName: string,
+  sourceContent: string,
+  run: (fixture: InstalledToolFixture) => Promise<void>,
+): Promise<void> {
+  const cwd = await mkdtemp(path.join(tmpdir(), "sm-check-installed-e2e-"));
+  const env = createRealToolEnv();
+  const sourcePath = path.join(cwd, sourceName);
+  let passed = false;
+
+  try {
+    await writeFile(path.join(cwd, "package.json"), '{"type":"module"}\n');
+    await writeFile(sourcePath, sourceContent);
+    await run({ cwd, env, installed: false, sourcePath });
+
+    await mkdir(path.join(cwd, "node_modules"));
+    await symlink(
+      path.join(repoRoot, "node_modules", packageName),
+      path.join(cwd, "node_modules", packageName),
+      symlinkDirType,
+    );
+    await run({ cwd, env, installed: true, sourcePath });
+    passed = true;
+  } finally {
+    await cleanupFixture(cwd, passed);
+  }
+}
+
 async function withCheckFixture(
   options: { badCss: boolean; badFormat: boolean; badTs: boolean },
   run: (fixture: CheckFixture) => Promise<void>,
@@ -433,6 +542,16 @@ async function withCheckFixture(
   let passed = false;
 
   try {
+    await mkdir(path.join(cwd, "node_modules"));
+    await Promise.all(
+      ["oxfmt", "oxlint", "stylelint"].map(packageName =>
+        symlink(
+          path.join(repoRoot, "node_modules", packageName),
+          path.join(cwd, "node_modules", packageName),
+          symlinkDirType,
+        ),
+      ),
+    );
     await writeCheckFixture(fixture, options);
     await run(fixture);
     passed = true;
@@ -453,6 +572,7 @@ async function writeCheckFixture(
       path.join(fixture.cwd, "package.json"),
       `${JSON.stringify({ type: "module" }, null, 2)}\n`,
     ),
+    writeFile(path.join(fixture.cwd, ".gitignore"), "node_modules\n"),
     writeFile(path.join(fixture.cwd, ".oxlintrc.json"), createOxlintConfig()),
     writeFile(path.join(fixture.cwd, "stylelint.config.ts"), createStylelintConfig()),
     writeFile(path.join(fixture.cwd, ".oxfmtrc.json"), createOxfmtConfig()),

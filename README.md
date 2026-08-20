@@ -97,6 +97,8 @@ npx sm create --component react # Control defaults through arguments; use `-h` t
 This command quickly creates a project from a preset template.
 
 - It does not empty the current working directory, but it will overwrite existing files.
+- In an interactive terminal, a failed package-manager process prompts whether to retry. `--yes` skips the interactive interface entirely, including this retry prompt.
+- After dependency installation succeeds, it runs all project checks in fix mode and reports creation success only when they pass.
 
 ### check
 
