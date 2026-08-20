@@ -41,26 +41,15 @@ Package 需要定义一个 Root Directory，默认为 `src` 目录。
 
 ### 索引模块
 
-索引模块有两种定义方式：
+索引模块有两种定义方式，且每个目录只允许存在最多一个索引模块：
 
-- 同级同名模块：模块作为同级目录中同名子目录的 Index Module。
-- `index` 模块：名称为 `index` 的模块称为该模块所在目录的 Index Module。
-
-规则：
-
-- 同个目录不允许同时存在多个索引模块。
-
-除了在根目录中使用 `index` 模块之外，推荐使用同级同名模块来定义索引模块。
+- `index` 索引模块：`<dirname>/index.js` 对应该模块所在目录，推荐根目录使用。
+- 同级同名索引模块：`<dirname>.js` 对应同级 `<dirname>/` 目录，推荐其它情况使用。
 
 例如：
 
 - `src/index.js` 是 `src` 目录的索引模块。
 - `src/utils.js` 是 `src/utils/` 目录的索引模块。
-
-### 术语
-
-- 父模块/子模块：`export` 语句所在的模块和被该语句导出的模块构成父子模块关系。
-- 父符号/子符号：符号间的包含关系，父符号为容器（如类、对象），子符号为其成员（如方法、属性）。
 
 ## 包可访问性
 
@@ -70,14 +59,15 @@ Package 需要定义一个 Root Directory，默认为 `src` 目录。
 
 - `@public` - 公开，可被任何包访问。
 - `@internal` - 私有，不可被其它包访问，仅在自身包内可访问。
-- `@unspecified` - 未指定，不能直接访问，但可通过公开的父模块访问。
+- `@unspecified` - 未指定，不能直接访问，但可通过其它公开的模块访问。
 
 标记规则：
 
 - 不存在任何包可访问性标记时，模块会被视为 `@unspecified`，符号会被视为 `@public`。
-- `@unspecified` 标记不允许显式声明，应通过保持无标记的方式来实现。
+- `@unspecified` 标记不允许显式声明，应通过保持无标记的方式来表示。
+- 符号不允许显式声明 `@public` 标记，应通过保持无标记的方式来表示。
 - 模块的包可访问性只取决于其自身的标记。
-- 符号最终是否可访问取决于其所在的模块、父级符号、符号本身的可访问性（受限于最严格的层级）。
+- 符号的最终包可访问性取决于其所在的模块、父级符号、符号本身的可访问性（受限于最严格的层级）。
 
 例如：
 
@@ -102,41 +92,30 @@ export const internalValue = 2;
  * @module
  */
 
-export * from "./utils.js";
+export { value } from "./utils.js";
 ```
 
 - `index.js` 模块被公开，任何包都可以访问。
 - `utils.js` 模块未指定可访问性，未直接公开，但可以通过 `index.js` 这个公开模块访问。
 - `value` 符号未指定可访问性，视为公开，其所在模块虽然未指定可访问性，但可通过公开的父模块 `index.js` 访问。
-- `internalValue` 符号被标记为私有，即使是通过公开的父模块 `index.js` 也无法访问。
+- `internalValue` 符号被标记为私有，即使是通过公开的模块 `index.js` 也无法访问。
 
-注意不要混淆 "包可访问性" 与导出语句 `export`，导出不意味着其它包可以访问。
+注意：
 
-当包可访问性为公开时，也意味着 `package.json` 存在相应的导出声明。
+- 注意不要混淆 "包可访问性" 与导出语句 `export`，使用 `export` 不意味着其它包就可以访问。
+- 当模块的包可访问性为公开时，也意味着 `package.json` 会存在相应的入口声明。
 
-例如，含有上面两个模块的包可能会存在以下内容：
-
-`src/entrypoint/index.js`
-
-```js
-export { value } from "../src/index.js";
-```
-
-`package.json`
+例如，含有上面两个模块的包的 `package.json` 应该是：
 
 ```json
 {
   "name": "my-package",
   "type": "module",
   "exports": {
-    ".": "./src/entrypoint/index.js"
+    ".": "./src/index.js"
   }
 }
 ```
-
-- 其它包可以通过 `my-package` 包访问 `value` 符号，但无法访问 `internalValue` 符号。
-- 为了保证正确的包可访问性，可能会存在类似 `src/entrypoint/index.js` 的入口模块。
-- 以上内容均可由构建工具自动生成，路径和文件名并非规范要求，可自行决定。
 
 ## 包访问路径
 
@@ -173,15 +152,9 @@ export { value } from "../src/index.js";
 }
 ```
 
-## 可选特性
+## 包组织约定
 
-### 特殊模块标识符
-
-#### `esp:submodules:<module-path>`
-
-该标识符用于指代在该路径的索引模块所对应的目录内所有未指定包可访问性的同级模块。
-
-例如：
+假设包结构如下：
 
 ```
 package/
@@ -205,9 +178,9 @@ package/
 └── package.json
 ```
 
-如果所有索引模块都使用 `export * from "esp:submodules:<module-path>"` 导出语句。
+索引模块应导出对应目录下所有未指定包可访问性的模块。
 
-那么对应地将映射成这样的包结构：
+最终模块导出关系如下：
 
 ```mermaid
 graph TD
@@ -219,6 +192,8 @@ graph TD
     E --> G["tools/time/algorithm.js"];
 ```
 
+生成的 `exports` 声明为：
+
 ```json
 {
   "exports": {
@@ -229,7 +204,7 @@ graph TD
 }
 ```
 
-### 二进制入口
+## 二进制入口
 
 有些运行时允许你将模块声明为二进制入口，使其成为可执行命令。
 
@@ -247,7 +222,7 @@ graph TD
 /**
  * This is a bin entrypoint.
  *
- * @bin cli
+ * @bin
  */
 ```
 
@@ -282,8 +257,39 @@ graph TD
 {
   "name": "cli",
   "bin": {
-    "cli": "./dist/bin.js",
-    "build": "./dist/bin.js"
+    "cli": "./bin.js",
+    "build": "./bin.js"
   }
 }
 ```
+
+## 工具实现
+
+该规范应由 Linter + Build Tool 共同实现。
+
+Linter 负责：
+
+- 检查当前包是否符合规范每一条要求。
+
+例如如果 `src/index.js` 导出了 `@internal` 值：
+
+```js
+/**
+ * This is a useful module.
+ *
+ * @public
+ * @module
+ */
+
+export * from "./utils.js";
+```
+
+则会在导出语句处报错。
+
+Build Tool 负责：
+
+- 自动根据规范生成 `package.json` 中的 `exports` 和 `bin` 字段。
+
+- 其它包可以通过 `my-package` 包访问 `value` 符号，但无法访问 `internalValue` 符号。
+- 为了保证正确的包可访问性，可能会存在类似 `src/entrypoint/index.js` 的入口模块。
+- 以上内容均可由构建工具自动生成，路径和文件名并非规范要求，可自行决定。
