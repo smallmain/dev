@@ -130,11 +130,15 @@ Supported Formatters:
 ### staged-run
 
 ```bash
-npx sm staged-run "npm run check" "."
-npx sm staged-run --update-index "npm run check:fix" "." # Re-stage files after automatic fixes
+npx sm staged-run . -- pnpm run check --
+npx sm staged-run --allow-empty ":(glob)src/**/*.ts" -- pnpm run check:fix --
+npx sm staged-run --list-recoveries
 ```
 
-This command appends matching Git staged files to the specified command and runs it.
+This command runs one command against staged regular files matched by Git pathspecs. It passes
+absolute file paths as raw arguments, stages fixes only for the originally matched files, and
+preserves partially staged changes. Interrupted transactions can be listed and explicitly
+recovered or discarded with the recovery subcommands shown by `--help`.
 
 ### set-git-hook
 

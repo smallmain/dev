@@ -1,117 +1,46 @@
-import { readCommandOutput, runCommand } from "./command-utils.ts";
+import { parseStagedRunArguments, stagedRunUsage } from "./staged-run/args.ts";
+import { discoverStagedFiles, preflightGit, resolveGitContext } from "./staged-run/git.ts";
+import {
+  discardStagedRunRecovery,
+  listStagedRunRecoveries,
+  recoverStagedRun,
+} from "./staged-run/recovery.ts";
+import { runStagedTransaction } from "./staged-run/transaction.ts";
 
-interface RawStagedRunOptions {
-  updateIndex?: boolean;
-}
-
-export async function runStagedRunCommand(
-  command: string | undefined,
-  globs: string[],
-  options: RawStagedRunOptions,
-): Promise<void> {
-  if (!command || globs.length === 0) {
-    throw new Error('Usage: sm staged-run "<command>" "<glob>" ["<glob>"...]');
+export async function runStagedRunCommand(args: string[]): Promise<void> {
+  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
+    console.log(stagedRunUsage);
+    return;
   }
 
-  const files = await getStagedFiles(globs);
+  const request = parseStagedRunArguments(args);
+  const context = await resolveGitContext(process.cwd());
+
+  if (request.kind === "list") {
+    await listStagedRunRecoveries(context);
+    return;
+  }
+
+  if (request.kind === "recover") {
+    await recoverStagedRun(context, request.id);
+    return;
+  }
+
+  if (request.kind === "discard") {
+    await discardStagedRunRecovery(context, request.id);
+    return;
+  }
+
+  await preflightGit(context);
+  const files = await discoverStagedFiles(context, request.pathspecs);
 
   if (files.length === 0) {
-    console.log(`Nothing staged for ${globs.join(" ")}`);
     return;
   }
 
-  const [executable, ...commandArgs] = parseCommand(command);
+  const exitCode = await runStagedTransaction(context, request, files);
 
-  if (!executable) {
-    throw new Error("Command is required.");
+  if (exitCode !== 0) {
+    process.exitCode = exitCode;
   }
-
-  const args = [...commandArgs, "--", ...files];
-  console.log(`${[executable, ...args].join(" ")}`);
-  const result = await runCommand(executable, args);
-
-  if (result.code !== 0) {
-    process.exitCode = result.code;
-    return;
-  }
-
-  if (options.updateIndex === true) {
-    const updateIndexResult = await runCommand("git", ["update-index", "--again"]);
-
-    if (updateIndexResult.code !== 0) {
-      process.exitCode = updateIndexResult.code;
-    }
-  }
-}
-
-async function getStagedFiles(globs: string[]): Promise<string[]> {
-  const output = await readCommandOutput("git", [
-    "diff",
-    "--staged",
-    "--name-only",
-    "--diff-filter=ACMR",
-    "-z",
-    "--",
-    ...globs,
-  ]);
-
-  return output.split("\0").filter(Boolean);
-}
-
-function parseCommand(command: string): string[] {
-  const args: string[] = [];
-  let current = "";
-  let quote: "'" | '"' | undefined;
-  let escaping = false;
-
-  for (const character of command) {
-    if (escaping) {
-      current += character;
-      escaping = false;
-      continue;
-    }
-
-    if (character === "\\" && quote !== "'") {
-      escaping = true;
-      continue;
-    }
-
-    if (quote) {
-      if (character === quote) {
-        quote = undefined;
-      } else {
-        current += character;
-      }
-      continue;
-    }
-
-    if (character === "'" || character === '"') {
-      quote = character;
-      continue;
-    }
-
-    if (/\s/u.test(character)) {
-      if (current.length > 0) {
-        args.push(current);
-        current = "";
-      }
-      continue;
-    }
-
-    current += character;
-  }
-
-  if (escaping) {
-    current += "\\";
-  }
-
-  if (quote) {
-    throw new Error("Unterminated quote in command.");
-  }
-
-  if (current.length > 0) {
-    args.push(current);
-  }
-
-  return args;
 }

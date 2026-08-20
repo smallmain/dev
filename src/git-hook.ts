@@ -107,7 +107,7 @@ function createPreCommitHookContent(packageManager: "npm" | "pnpm"): string {
   return `#!/bin/sh
 ${managedPreCommitMarker}
 PATH="$(git rev-parse --show-toplevel)/node_modules/.bin:$PATH"
-sm staged-run "${packageManager} run check" "."
+sm staged-run . -- ${packageManager} run check --
 `;
 }
 

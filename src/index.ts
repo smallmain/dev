@@ -26,6 +26,12 @@ function getCheckSubcommandFixOption(
 
 async function main(): Promise<void> {
   const packageJson = await readPackageJson();
+
+  if (process.argv[2] === "staged-run") {
+    await runStagedRunCommand(process.argv.slice(3));
+    return;
+  }
+
   const program = new Command();
 
   program
@@ -94,12 +100,8 @@ async function main(): Promise<void> {
     );
 
   program
-    .command("staged-run [command] [globs...]")
-    .description("Run a command against staged files matched by Git pathspecs.")
-    .option("--update-index", "Run git update-index --again after the command succeeds.")
-    .action((command: string | undefined, globs: string[], options: { updateIndex?: boolean }) =>
-      runStagedRunCommand(command, globs, options),
-    );
+    .command("staged-run")
+    .description("Safely run one command against staged files matched by Git pathspecs.");
 
   program
     .command("set-git-hook")

@@ -91,6 +91,11 @@ for (const variant of variants) {
           await expectNoOxlintDiagnostics(projectDir);
 
           if (variant.runStylelint) {
+            await mkdir(path.join(projectDir, "dist"), { recursive: true });
+            await writeFile(
+              path.join(projectDir, "dist/invalid.css"),
+              ".invalid { color: #fffffg; }\n",
+            );
             await expectNoStylelintDiagnostics(projectDir, env);
           }
 

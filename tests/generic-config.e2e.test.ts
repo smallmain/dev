@@ -13,6 +13,7 @@ import {
 } from "./cli-e2e-utils.ts";
 
 const genericSpecifier = pathToFileURL(path.join(distDir, "oxlint/generic.js")).href;
+const stylelintGenericSpecifier = pathToFileURL(path.join(distDir, "stylelint/generic.js")).href;
 
 interface GenericFixture {
   cwd: string;
@@ -52,6 +53,21 @@ test("the generic entry point exports the Next.js configuration", async () => {
   const genericModule = await import(genericSpecifier);
 
   expect(genericModule.nextjs).toBeDefined();
+});
+
+test("the generic Stylelint entry point exports project ignore patterns", async () => {
+  const genericModule = await import(stylelintGenericSpecifier);
+
+  expect(genericModule.genericIgnoreFiles).toEqual([
+    "**/node_modules/**",
+    "**/coverage/**",
+    "**/dist/**",
+    "**/out-tsc/**",
+    "**/temp/**",
+    "**/tmp/**",
+    "**/vendor/**",
+    "**/*.min.css",
+  ]);
 });
 
 test(

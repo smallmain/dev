@@ -188,6 +188,10 @@ test(
         expect(packageJson.devEngines?.packageManager?.name).toBe("npm");
         expect(packageJson.engines?.node).toBe("^24");
         expect(stylelintConfig).toContain("@smallmains/dev/stylelint/css-modules.js");
+        expect(stylelintConfig).toContain(
+          'import { genericIgnoreFiles } from "@smallmains/dev/stylelint/generic.js";',
+        );
+        expect(stylelintConfig).toContain("ignoreFiles: genericIgnoreFiles");
         expect(oxlintConfig).toContain("{ inheritSettings, nodejs, vitest }");
         expect(oxlintConfig).toContain("extends: [generic, nodejs, vitest]");
         expect(oxlintConfig).toContain("oxc-project/oxc#24337");

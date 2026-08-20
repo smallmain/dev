@@ -1,5 +1,16 @@
 import type { Config } from "stylelint";
 
+export const genericIgnoreFiles = [
+  "**/node_modules/**",
+  "**/coverage/**",
+  "**/dist/**",
+  "**/out-tsc/**",
+  "**/temp/**",
+  "**/tmp/**",
+  "**/vendor/**",
+  "**/*.min.css",
+];
+
 export default {
   extends: [
     "stylelint-config-standard",

@@ -167,6 +167,49 @@ test(
 );
 
 test(
+  "check respects Stylelint ignoreFiles for discovered and explicit files",
+  async () => {
+    await withCheckFixture({ badCss: false, badFormat: false, badTs: false }, async fixture => {
+      const ignoredCss = "dist/invalid.css";
+
+      await mkdir(path.dirname(path.join(fixture.cwd, ignoredCss)), { recursive: true });
+      await Promise.all([
+        writeFile(path.join(fixture.cwd, ignoredCss), createBadCss()),
+        writeFile(
+          path.join(fixture.cwd, "stylelint.config.ts"),
+          createStylelintConfig(["**/dist/**"]),
+        ),
+      ]);
+
+      const discoveredResult = await runSm(["check", "lint"], {
+        cwd: fixture.cwd,
+        env: fixture.env,
+      });
+      const explicitResult = await runSm(["check", "lint", ignoredCss], {
+        cwd: fixture.cwd,
+        env: fixture.env,
+      });
+
+      expect(
+        discoveredResult,
+        formatCommandFailure("sm check lint", discoveredResult),
+      ).toMatchObject({
+        exitCode: 0,
+        timedOut: false,
+      });
+      expect(
+        explicitResult,
+        formatCommandFailure(`sm check lint ${ignoredCss}`, explicitResult),
+      ).toMatchObject({
+        exitCode: 0,
+        timedOut: false,
+      });
+    });
+  },
+  testTimeoutMs,
+);
+
+test(
   "check lint includes EJS files by default and when explicitly provided",
   async () => {
     await withCheckFixture({ badCss: false, badFormat: false, badTs: false }, async fixture => {
@@ -618,9 +661,10 @@ function createOxlintConfig(): string {
   )}\n`;
 }
 
-function createStylelintConfig(): string {
+function createStylelintConfig(ignoreFiles?: string[]): string {
   return [
     "export default {",
+    ...(ignoreFiles ? [`  ignoreFiles: ${JSON.stringify(ignoreFiles)},`] : []),
     "  rules: {",
     '    "color-no-invalid-hex": true,',
     "  },",

@@ -74,7 +74,7 @@ test(
       const commitMsg = await readFile(path.join(cwd, ".git/hooks/commit-msg"), "utf8");
 
       expect(preCommit).toContain("# sm managed pre-commit hook");
-      expect(preCommit).toContain('sm staged-run "pnpm run check" "."');
+      expect(preCommit).toContain("sm staged-run . -- pnpm run check --");
       expect(commitMsg).toContain("# sm managed commit-msg hook");
       expect(commitMsg).toContain('sm check commit-message "$1"');
       expect(result.stdout).toContain("Installed");

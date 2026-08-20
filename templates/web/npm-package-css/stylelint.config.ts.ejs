@@ -1,5 +1,7 @@
+import { genericIgnoreFiles } from "@smallmains/dev/stylelint/generic.js";
 import type { Config } from "stylelint";
 
 export default {
   extends: "@smallmains/dev/stylelint/<%- stylelintConfig %>.js",
+  ignoreFiles: genericIgnoreFiles,
 } satisfies Config;

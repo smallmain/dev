@@ -130,11 +130,14 @@ npx sm check commit-message .git/COMMIT_EDITMSG      # 检查提交信息文件
 ### staged-run
 
 ```bash
-npx sm staged-run "npm run check" "."
-npx sm staged-run --update-index "npm run check:fix" "." # 自动修复后重新暂存文件
+npx sm staged-run . -- pnpm run check --
+npx sm staged-run --allow-empty ":(glob)src/**/*.ts" -- pnpm run check:fix --
+npx sm staged-run --list-recoveries
 ```
 
-该命令将 Git 暂存区文件追加到指定命令后执行。
+该命令对 Git pathspec 匹配的已暂存常规文件执行一个命令。它将绝对文件路径作为原始参数传递，
+只重新暂存最初匹配文件的修复，并保留部分暂存的更改。中断的事务可通过恢复子命令列出并显式
+恢复或丢弃，具体用法可查看 `--help`。
 
 ### set-git-hook
 
