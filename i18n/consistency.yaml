@@ -1,7 +1,7 @@
-README.md: 810ee141291719094647a855e14b318cce318d28
-README.zh.md: 7ea761581861f5aede3b359f8ff5b403a67ce367
-proposals/cli.md: 9b875b44ffffc9be54a9ed2c9d83e69e416654fd
-proposals/cli.zh.md: 89a3c4cefdc34d7de44aef793388aab9aea90e24
+README.md: 24e9ad3cc5a70ba60fa6f4bb59895166b23c5fc9
+README.zh.md: 34d30e32427eab46a38950c4473a5aa0e202d11f
+proposals/cli.md: fb098cc83e717427b3f10841492acbffa5452f51
+proposals/cli.zh.md: 369273760d93a016474e23633538009fc4d414cf
 proposals/cli-build.md: 8ea82d6c68418ee9afdb302c9d1dcae82992c1f1
 proposals/cli-build.zh.md: 4ca80c611031fdab81c8b4406114614e83419480
 proposals/config.md: 5c8568d936db72328423b140bfb2ea4c94b0d148
@@ -10,8 +10,8 @@ proposals/oxlint-plugin.md: 576ad2d50dbd3e1994c1c5fc507e37a14c2af0f0
 proposals/oxlint-plugin.zh.md: a398e5a2afdda66eea0a050f4678cf284a9edf24
 proposals/package.md: 6bdfdc748951cedd7f5e9628557ba7eafe20a604
 proposals/package.zh.md: e226e50d94261b560f9bdb91703004349ce924fd
-proposals/test.md: 79aebb40562bff82712b878adb05183d3010982e
-proposals/test.zh.md: 9b745dcd0e28d6c813fbe5cf8351dc751a85e20d
+proposals/test.md: b6aa710d0f6a92a9337f9ab48477afe5417e6683
+proposals/test.zh.md: 9524e7d725e735f4a2dbc4d28e0ab0b49c2306fe
 specs/web/coding.md: 1b8815897b2654c91ffec07553cca940c025266b
 specs/web/coding.zh.md: 2bc4a86b8b4d2e41bb155cf4f888126e2528bf85
 specs/web/ecc.md: 0a2e35d39431f4f4b014cc5a5e13bd5c27dc1722

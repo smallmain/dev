@@ -29,23 +29,5 @@ interface Config {
   web?: WebConfig;
 }
 
-interface WebConfig {
-  /**
-   * 开发时的平台；构建时的默认平台。
-   *
-   * @default "neutral"
-   */
-  platform?: "node" | "browser" | "neutral";
-
-  /**
-   * 开发时激活的额外条件。
-   *
-   * @default 如果提供了 {@link platform} 则自动推断。
-   */
-  activeConditions?: string[] | Record<string, string>;
-}
+interface WebConfig {}
 ```
-
-## `update-config` 命令
-
-npmpackagejsonlint + publint + attw + knip

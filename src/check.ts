@@ -30,6 +30,20 @@ interface CheckRunner {
   args: string[];
 }
 
+interface ProjectPackageJson {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+}
+
+const dependencyFields = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+] as const;
+
 const stylelintDefaultPatterns = [
   "**/*.{css,scss,sass,less,pcss,html,ejs,vue,svelte,astro,md,mdx}",
 ];
@@ -104,17 +118,19 @@ export async function runCheckCommitMessageCommand(
 
 async function runLintCheck(files: string[], options: RawLintOptions): Promise<number> {
   const cwd = process.cwd();
-  const runners = [
-    createOxlintRunner(cwd, files, options),
-    createStylelintRunner(cwd, files, options),
-  ].filter((runner): runner is CheckRunner => runner !== undefined);
+  const runners = (
+    await Promise.all([
+      createOxlintRunner(cwd, files, options),
+      createStylelintRunner(cwd, files, options),
+    ])
+  ).filter((runner): runner is CheckRunner => runner !== undefined);
 
   return runRunners(cwd, runners);
 }
 
 async function runFormatCheck(files: string[], options: RawFormatOptions): Promise<number> {
   const cwd = process.cwd();
-  const runner = createOxfmtRunner(cwd, files, options);
+  const runner = await createOxfmtRunner(cwd, files, options);
 
   return runner ? runRunners(cwd, [runner]) : 0;
 }
@@ -171,12 +187,12 @@ async function lintCommitMessageText(message: string): Promise<boolean> {
   return result.valid;
 }
 
-function createOxlintRunner(
+async function createOxlintRunner(
   cwd: string,
   files: string[],
   options: RawLintOptions,
-): CheckRunner | undefined {
-  if (!isPackageInstalled(cwd, "oxlint")) {
+): Promise<CheckRunner | undefined> {
+  if (!(await isPackageInstalled(cwd, "oxlint"))) {
     return undefined;
   }
 
@@ -186,12 +202,12 @@ function createOxlintRunner(
   };
 }
 
-function createStylelintRunner(
+async function createStylelintRunner(
   cwd: string,
   files: string[],
   options: RawLintOptions,
-): CheckRunner | undefined {
-  if (!isPackageInstalled(cwd, "stylelint")) {
+): Promise<CheckRunner | undefined> {
+  if (!(await isPackageInstalled(cwd, "stylelint"))) {
     return undefined;
   }
 
@@ -208,12 +224,12 @@ function createStylelintRunner(
   };
 }
 
-function createOxfmtRunner(
+async function createOxfmtRunner(
   cwd: string,
   files: string[],
   options: RawFormatOptions,
-): CheckRunner | undefined {
-  if (!isPackageInstalled(cwd, "oxfmt")) {
+): Promise<CheckRunner | undefined> {
+  if (!(await isPackageInstalled(cwd, "oxfmt"))) {
     return undefined;
   }
 
@@ -286,7 +302,25 @@ function parseGitDirFile(content: string): string | undefined {
   return match?.groups?.gitDir;
 }
 
-function isPackageInstalled(cwd: string, packageName: string): boolean {
+async function isPackageInstalled(cwd: string, packageName: string): Promise<boolean> {
+  let packageJson: ProjectPackageJson;
+
+  try {
+    packageJson = JSON.parse(
+      await readFile(path.join(cwd, "package.json"), "utf8"),
+    ) as ProjectPackageJson;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+
+  if (!dependencyFields.some(field => Object.hasOwn(packageJson[field] ?? {}, packageName))) {
+    return false;
+  }
+
   const require = createRequire(path.join(cwd, "package.json"));
 
   try {

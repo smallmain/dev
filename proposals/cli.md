@@ -90,7 +90,7 @@ This command checks the project using the checking tools in the project.
 
 Tool execution rules:
 
-- Run each installed tool among Oxlint, Stylelint, and Oxfmt. When no explicit configuration is present, run the tool with its default configuration.
+- Run each directly declared and installed tool among Oxlint, Stylelint, and Oxfmt. A tool must be declared in the current project's `dependencies`, `devDependencies`, `optionalDependencies`, or `peerDependencies` and resolvable from the project. A transitive tool, including one installed only to satisfy another package's peer dependency, does not count. When no explicit configuration is present, run the tool with its default configuration.
 - Do not run tools that are not installed or are disabled by `--no-lint`, `--no-format`, or the selected subcommand.
 - Run Oxlint, Stylelint, and Oxfmt in order. A tool failure does not prevent later tools from running, and any tool failure makes the command fail.
 - When files are specified, Oxlint and Oxfmt receive all files, while Stylelint receives only its supported file types.

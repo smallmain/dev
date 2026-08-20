@@ -90,7 +90,7 @@ TODO
 
 工具执行规则：
 
-- Oxlint、Stylelint 和 Oxfmt 中安装了哪个就执行哪个；没有显式配置时，使用该工具的默认配置执行。
+- Oxlint、Stylelint 和 Oxfmt 中由当前项目直接声明且已安装的工具才会执行。工具必须在当前项目的 `dependencies`、`devDependencies`、`optionalDependencies` 或 `peerDependencies` 中声明，并且可从项目中解析；传递依赖中的工具不算已安装，包括仅为满足其它包的 peer dependency 而安装的工具。没有显式配置时，使用该工具的默认配置执行。
 - 未安装的工具，以及 `--no-lint`、`--no-format` 或所选子命令禁用的工具不执行。
 - Oxlint、Stylelint、Oxfmt 按顺序执行；某个工具失败不会阻止后续工具执行，任一工具失败都会使命令失败。
 - 指定文件时，Oxlint 和 Oxfmt 接收全部文件，Stylelint 仅接收其支持的文件类型。

@@ -143,6 +143,58 @@ test(
 );
 
 test(
+  "check skips resolvable tools that are not declared by the project",
+  async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "sm-check-undeclared-e2e-"));
+    const sources = {
+      "bad-format.ts": "export const values=[1,2,3]\n",
+      "invalid.css": ".invalid {\n",
+      "invalid.ts": "export const value = ;\n",
+    };
+    let passed = false;
+
+    try {
+      await mkdir(path.join(cwd, "node_modules"));
+      await Promise.all([
+        ...["oxfmt", "oxlint", "stylelint"].map(packageName =>
+          symlink(
+            path.join(repoRoot, "node_modules", packageName),
+            path.join(cwd, "node_modules", packageName),
+            symlinkDirType,
+          ),
+        ),
+        writeFile(path.join(cwd, "package.json"), '{"type":"module"}\n'),
+        ...Object.entries(sources).map(([file, content]) =>
+          writeFile(path.join(cwd, file), content),
+        ),
+      ]);
+
+      const result = await runSm(["check", "--fix", ...Object.keys(sources)], {
+        cwd,
+        env: createRealToolEnv(),
+      });
+
+      expect(
+        result,
+        formatCommandFailure("sm check --fix with undeclared tools", result),
+      ).toMatchObject({
+        exitCode: 0,
+        timedOut: false,
+      });
+      await Promise.all(
+        Object.entries(sources).map(async ([file, content]) => {
+          await expect(readFile(path.join(cwd, file), "utf8")).resolves.toBe(content);
+        }),
+      );
+      passed = true;
+    } finally {
+      await cleanupFixture(cwd, passed);
+    }
+  },
+  testTimeoutMs,
+);
+
+test(
   "check reports Oxlint failures",
   async () => {
     await withCheckFixture({ badCss: false, badFormat: false, badTs: true }, async fixture => {
@@ -555,7 +607,10 @@ async function withInstalledToolToggle(
   let passed = false;
 
   try {
-    await writeFile(path.join(cwd, "package.json"), '{"type":"module"}\n');
+    await writeFile(
+      path.join(cwd, "package.json"),
+      `${JSON.stringify({ type: "module", devDependencies: { [packageName]: "*" } })}\n`,
+    );
     await writeFile(sourcePath, sourceContent);
     await run({ cwd, env, installed: false, sourcePath });
 
@@ -613,7 +668,18 @@ async function writeCheckFixture(
   await Promise.all([
     writeFile(
       path.join(fixture.cwd, "package.json"),
-      `${JSON.stringify({ type: "module" }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          type: "module",
+          devDependencies: {
+            oxfmt: "*",
+            oxlint: "*",
+            stylelint: "*",
+          },
+        },
+        null,
+        2,
+      )}\n`,
     ),
     writeFile(path.join(fixture.cwd, ".gitignore"), "node_modules\n"),
     writeFile(path.join(fixture.cwd, ".oxlintrc.json"), createOxlintConfig()),

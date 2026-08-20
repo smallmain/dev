@@ -35,7 +35,7 @@ CLI commands and Oxlint plugins are both verified end-to-end:
 - `create` phase control: verify that an installation failure prevents the final checks and the success report, and that a failed final check prevents the success report after installation succeeds.
 - Successful `create` scenarios must expose the built package and real check tools as installed project dependencies, intentionally render at least one non-canonical file, prove that the final fix phase repairs it, and verify that the generated project immediately passes `sm check`. Do not pre-format the template merely to make this test pass.
 - `check`: cover Oxlint, Stylelint, and Oxfmt success, failure, and fixes separately; file-type filtering; subcommand options; exit codes; and commit-message input from text, a file, and the default Git path.
-- `check` tool selection: cover running an installed tool with both explicit and default configuration, skipping an uninstalled tool, and not running disabled tool categories.
+- `check` tool selection: cover running a directly declared and installed tool with both explicit and default configuration; skipping undeclared transitive tools, including tools installed for another package's peer dependency; skipping an uninstalled tool; and not running disabled tool categories.
 - `staged-run`: use the four test layers below to verify its CLI, Git transaction, recovery, and hook behavior.
 - `set-git-hook`: cover hook contents, skipping without `.git`, overwriting existing hooks by default, and clearing `core.hooksPath`.
 
